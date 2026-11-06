@@ -269,7 +269,7 @@ if (typeof document !== 'undefined') {
         { nombre: 'Tabla 7×7×300', largo: 300, ancho: 7, espesor: 7, precio: 0 },
       ],
       kerf: 0.3, rotar: false, unir: true, notas: '',
-      diseno: { ancho: 80, alto: 180, el: [] },
+      diseno: { ancho: 80, alto: 180, prof: 30, el: [] },
     };
   }
   function valoresIniciales(k) {
@@ -432,7 +432,7 @@ if (typeof document !== 'undefined') {
   /* ---- Diseñador ---- */
   const NS = 'http://www.w3.org/2000/svg';
   let selId = null, arrastre = null;
-  function dis() { if (!estado.diseno) estado.diseno = { ancho: 80, alto: 180, el: [] }; return estado.diseno; }
+  function dis() { if (!estado.diseno) estado.diseno = { ancho: 80, alto: 180, prof: 30, el: [] }; if (!estado.diseno.prof) estado.diseno.prof = 30; return estado.diseno; }
   function rectDe(e) { return e.orient === 'V' ? { w: e.esp, h: e.largo } : { w: e.largo, h: e.esp }; }
 
   function pintarCanvas() {
@@ -442,7 +442,7 @@ if (typeof document !== 'undefined') {
     let g = `<rect x="0" y="0" width="${d.ancho}" height="${d.alto}" fill="#fff" stroke="#999" stroke-dasharray="2 2" stroke-width=".3"/>`;
     for (let x = 10; x < d.ancho; x += 10) g += `<line x1="${x}" y1="0" x2="${x}" y2="${d.alto}" stroke="#eee" stroke-width=".2"/>`;
     for (let y = 10; y < d.alto; y += 10) g += `<line x1="0" y1="${y}" x2="${d.ancho}" y2="${y}" stroke="#eee" stroke-width=".2"/>`;
-    g += `<text x="${d.ancho / 2}" y="${d.alto + pad - 1}" font-size="${fs}" text-anchor="middle">${d.ancho} cm</text>`;
+    g += `<text x="${d.ancho / 2}" y="${d.alto + pad - 1}" font-size="${fs}" text-anchor="middle">${d.ancho} cm · fondo ${d.prof} cm</text>`;
     g += `<text transform="translate(${-pad + fs},${d.alto / 2}) rotate(-90)" font-size="${fs}" text-anchor="middle">${d.alto} cm</text>`;
     d.el.forEach(e => {
       const q = rectDe(e);
@@ -460,7 +460,7 @@ if (typeof document !== 'undefined') {
   function pintarResumenDiseno() {
     const d = dis(), ps = piezasDesdeDiseno(d.el);
     $('d-resumen').innerHTML = d.el.length
-      ? `<b>${d.el.length} piezas en el diseño:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
+      ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${d.el.length} piezas:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
       : 'Todavía no hay tablas en el diseño.';
   }
   function pintarTablaDiseno() {
@@ -473,7 +473,7 @@ if (typeof document !== 'undefined') {
   function nuevoEl(orient) {
     const d = dis(), n = d.el.length;
     const e = { id: Date.now() + Math.random(), nombre: orient === 'H' ? 'Repisa' : 'Lateral', orient,
-      largo: orient === 'H' ? d.ancho : d.alto, esp: 2, prof: 30, x: 0, y: 0 };
+      largo: orient === 'H' ? d.ancho : d.alto, esp: 2, prof: d.prof, x: 0, y: 0 };
     if (orient === 'H') e.y = Math.min(d.alto - e.esp, n * 10);
     selId = e.id; d.el.push(e); guardar(); pintarTablaDiseno(); pintarCanvas();
   }
@@ -486,6 +486,10 @@ if (typeof document !== 'undefined') {
   $('d-add-v').addEventListener('click', () => nuevoEl('V'));
   $('d-ancho').addEventListener('input', e => { dis().ancho = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
   $('d-alto').addEventListener('input', e => { dis().alto = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
+  $('d-prof').addEventListener('input', e => { dis().prof = Math.max(1, parseFloat(e.target.value) || 1); guardar(); pintarCanvas(); });
+  $('d-aplicar-prof').addEventListener('click', () => {
+    dis().el.forEach(x => x.prof = dis().prof); guardar(); pintarTablaDiseno(); pintarCanvas();
+  });
   $('d-limpiar').addEventListener('click', () => {
     if (confirm('¿Borrar todo el diseño?')) { dis().el = []; selId = null; guardar(); pintarTablaDiseno(); pintarCanvas(); }
   });
@@ -545,7 +549,7 @@ if (typeof document !== 'undefined') {
 
   function iniciar() {
     $('notas').value = estado.notas || '';
-    $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto;
+    $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto; $('d-prof').value = dis().prof;
     pintarTablaDiseno(); pintarCanvas();
     $('kerf').value = estado.kerf;
     $('rotar').checked = !!estado.rotar;
