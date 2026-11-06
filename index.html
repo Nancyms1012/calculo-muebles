@@ -62,14 +62,16 @@
       </table>
     </div>
     <div id="d-resumen" class="hint"></div>
-    <button id="d-pasar" class="primary">Pasar diseño a la lista de piezas ⬇</button>
     <button id="d-borrar-sel" class="danger">🗑 Borrar tabla seleccionada</button>
     <button id="d-limpiar" class="danger">Borrar todo el diseño</button>
   </section>
 
   <section class="card">
     <h2>2. Piezas a cortar</h2>
-    <p class="hint">Todas las medidas en centímetros (cm). “Largo” es la medida a lo largo de la veta.</p>
+    <p class="hint">Se calculan <b>automáticamente</b> a partir de tu diseño. Todas las medidas en centímetros (cm). “Largo” es la medida a lo largo de la veta.</p>
+    <div id="piezas-auto"></div>
+    <h3>Piezas adicionales (opcional)</h3>
+    <p class="hint">Si necesitás piezas que no están en el diseño (ej. puertas, fondo, cajones), agregalas acá. Se suman a las del diseño.</p>
     <div class="table-wrap">
       <table id="tabla-piezas">
         <thead><tr><th><input type="checkbox" id="p-todas" title="Seleccionar todas"></th><th>Nombre</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th><th></th></tr></thead>

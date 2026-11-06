@@ -108,7 +108,7 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
   for (const [esp, lista] of porEspesor) {
     const opciones = stock.filter(s => Math.abs(+s.espesor - esp) < EPS && s.largo > 0 && s.ancho > 0);
     if (!opciones.length) {
-      errores.push(`No hay tablas de ${esp} cm de espesor para las piezas de ese grosor.`);
+      errores.push(`Hay piezas de ${esp} cm de espesor, pero en la sección 3 no hay tablas de ${esp} cm. Agregá una tabla de ese espesor (o cambiá el espesor de las piezas).`);
       continue;
     }
     let elegida = null;
@@ -274,8 +274,9 @@ if (typeof document !== 'undefined') {
     return {
       plantilla: 'mesa',
       valores: {},
-      piezas: PLANTILLAS.mesa.piezas(valoresIniciales('mesa')),
+      piezas: [], v2: true,
       stock: [
+        { nombre: 'Tabla 2×30×300', largo: 300, ancho: 30, espesor: 2, precio: 0 },
         { nombre: 'Tabla 2.5×20×300', largo: 300, ancho: 20, espesor: 2.5, precio: 0 },
         { nombre: 'Tabla 3×30×300', largo: 300, ancho: 30, espesor: 3, precio: 0 },
         { nombre: 'Tabla 7×7×300', largo: 300, ancho: 7, espesor: 7, precio: 0 },
@@ -290,7 +291,14 @@ if (typeof document !== 'undefined') {
     return o;
   }
   function cargar() {
-    try { const s = JSON.parse(localStorage.getItem(CLAVE)); if (s && s.piezas && s.stock) return s; } catch (e) {}
+    try {
+      const s = JSON.parse(localStorage.getItem(CLAVE));
+      if (s && s.piezas && s.stock) {
+        // Migración: antes el diseño se copiaba a la lista; ahora el diseño se calcula solo.
+        if (!s.v2) { s.v2 = true; if (s.diseno && s.diseno.el && s.diseno.el.length) s.piezas = []; }
+        return s;
+      }
+    } catch (e) {}
     return porDefecto();
   }
   function guardar() { localStorage.setItem(CLAVE, JSON.stringify(estado)); }
@@ -363,7 +371,7 @@ if (typeof document !== 'undefined') {
   $('btn-generar').addEventListener('click', () => {
     const v = leerValores();
     const nuevas = PLANTILLAS[estado.plantilla].piezas(v);
-    if (estado.piezas.length && !confirm('Esto reemplaza la lista de piezas actual. ¿Continuar?')) return;
+    if (estado.piezas.length && !confirm('Esto reemplaza las piezas adicionales actuales (las del diseño no cambian). ¿Continuar?')) return;
     estado.piezas = nuevas; guardar(); pintarPiezas();
   });
   $('btn-add-pieza').addEventListener('click', () => {
@@ -409,7 +417,7 @@ if (typeof document !== 'undefined') {
   });
 
   $('btn-calcular').addEventListener('click', () => {
-    const plan = calcularPlan(estado.piezas, estado.stock, estado.kerf, estado.rotar, estado.unir);
+    const plan = calcularPlan(todasLasPiezas(), estado.stock, estado.kerf, estado.rotar, estado.unir);
     pintarResultado(plan);
   });
 
@@ -482,7 +490,18 @@ if (typeof document !== 'undefined') {
     cv.innerHTML = g;
     pintarResumenDiseno();
   }
+  function todasLasPiezas() { return piezasDesdeDiseno(dis().el).concat(estado.piezas); }
+  function pintarAuto() {
+    const ps = piezasDesdeDiseno(dis().el), mats = materialesDesdeDiseno(dis().el);
+    const total = ps.reduce((t, p) => t + p.cant, 0);
+    $('piezas-auto').innerHTML = ps.length
+      ? `<b>Del diseño: ${total} piezas</b><div class="table-wrap"><table class="cortes"><thead><tr><th>Pieza</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th></tr></thead><tbody>${
+        ps.map(p => `<tr><td>${esc(p.nombre)}</td><td>${num(p.largo)}</td><td>${num(p.ancho)}</td><td>${num(p.espesor)}</td><td><b>${p.cant}</b></td></tr>`).join('')
+      }</tbody></table></div>` + (mats.length ? `<p class="hint">Aparte (no es madera): ${mats.map(m => `${m.cant} × ${esc(m.nombre)} de ${num(m.largo)} cm`).join(', ')}</p>` : '')
+      : '<p class="hint">Todavía no hay piezas: agregá techo, piso, costados, repisas, etc. en el Diseñador (arriba) y aparecerán aquí solas.</p>';
+  }
   function pintarResumenDiseno() {
+    pintarAuto();
     const d = dis(), ps = piezasDesdeDiseno(d.el);
     $('d-resumen').innerHTML = d.el.length
       ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${ps.reduce((t, p) => t + p.cant, 0)} piezas de madera:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
@@ -541,13 +560,6 @@ if (typeof document !== 'undefined') {
   });
   $('d-limpiar').addEventListener('click', () => {
     if (confirm('¿Borrar todo el diseño?')) { dis().el = []; selId = null; guardar(); pintarTablaDiseno(); pintarCanvas(); }
-  });
-  $('d-pasar').addEventListener('click', () => {
-    const ps = piezasDesdeDiseno(dis().el);
-    if (!ps.length) { alert('Primero agregá tablas al diseño.'); return; }
-    if (estado.piezas.length && !confirm('Esto reemplaza la lista de piezas actual por las del diseño. ¿Continuar?')) return;
-    estado.piezas = ps; guardar(); pintarPiezas();
-    $('tabla-piezas').scrollIntoView({ behavior: 'smooth' });
   });
   document.addEventListener('input', e => {
     const t = e.target;
