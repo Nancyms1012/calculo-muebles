@@ -42,7 +42,7 @@ function mejorEspacio(bin, b, p, kerf, rotar) {
 function colocar(bin, m, p, kerf) {
   const f = bin.libres[m.idx];
   const pw = m.w + kerf, ph = m.h + kerf;
-  bin.piezas.push({ nombre: p.nombre, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
+  bin.piezas.push({ nombre: p.nombre, m: p.m, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
   bin.libres.splice(m.idx, 1);
   const rw = f.w - pw, rh = f.h - ph;
   let r1, r2;
@@ -66,7 +66,7 @@ function expandirTiras(lista, L, A, rotar) {
     if (cabeAsi || cabeGirada || p.w > L + EPS) { out.push(p); continue; }
     const n = Math.ceil(p.h / A - EPS);
     const h = Math.round((p.h / n) * 100) / 100;
-    for (let i = 1; i <= n; i++) out.push({ nombre: `${p.nombre} (tira ${i}/${n})`, w: p.w, h, tira: true });
+    for (let i = 1; i <= n; i++) out.push({ nombre: `${p.nombre} (tira ${i}/${n})`, w: p.w, h, tira: true, m: p.m });
   }
   return out;
 }
@@ -92,6 +92,16 @@ function optimizar(piezas, W, H, kerf, rotar) {
   return mejor;
 }
 
+// Retazos aprovechables (sobrantes) de una tabla ya empacada, recortados a los bordes de la tabla.
+function retazosDe(bin, L, A, kerf, minimo) {
+  const out = [];
+  for (const f of bin.libres) {
+    const w = Math.min(f.w, L - f.x), h = Math.min(f.h, A - f.y);
+    if (w >= minimo - EPS && h >= minimo - EPS) out.push({ x: f.x, y: f.y, w: Math.round(w * 100) / 100, h: Math.round(h * 100) / 100 });
+  }
+  return out;
+}
+
 // Calcula el plan completo. Devuelve {grupos, errores, totalTablas, costoTotal}
 function calcularPlan(piezas, stock, kerf, rotar, unir) {
   const errores = [];
@@ -102,7 +112,7 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
     const k = +p.espesor;
     if (!porEspesor.has(k)) porEspesor.set(k, []);
     for (let i = 0; i < p.cant; i++) {
-      porEspesor.get(k).push({ nombre: p.nombre || 'Pieza', w: +p.largo, h: +p.ancho });
+      porEspesor.get(k).push({ nombre: p.nombre || 'Pieza', w: +p.largo, h: +p.ancho, m: p.m });
     }
   }
   for (const [esp, lista] of porEspesor) {
@@ -304,8 +314,35 @@ if (typeof document !== 'undefined') {
         { nombre: 'Tabla 7×7×300', largo: 300, ancho: 7, espesor: 7, precio: 0 },
       ],
       kerf: 0.3, rotar: false, unir: true, notas: '',
-      diseno: { ancho: 80, alto: 180, prof: 30, esp: 2, el: [] },
+      diseno: nuevoDiseno(),
     };
+  }
+  function nuevoDiseno() { return { ancho: 80, alto: 180, prof: 30, esp: 2, el: [] }; }
+  function migrar(s) {
+    if (!Array.isArray(s.muebles) || !s.muebles.length) {
+      s.muebles = [{ nombre: 'Mueble 1', diseno: s.diseno || nuevoDiseno(), piezas: s.piezas || [] }];
+      s.activo = 0;
+    }
+    s.muebles.forEach((m, i) => {
+      if (!m.nombre) m.nombre = 'Mueble ' + (i + 1);
+      if (!m.diseno) m.diseno = nuevoDiseno();
+      if (!m.diseno.el) m.diseno.el = [];
+      if (!m.diseno.prof) m.diseno.prof = 30;
+      if (!m.diseno.esp) m.diseno.esp = 2;
+      if (!Array.isArray(m.piezas)) m.piezas = [];
+    });
+    if (!(s.activo >= 0 && s.activo < s.muebles.length)) s.activo = 0;
+    s.diseno = s.muebles[s.activo].diseno;
+    s.piezas = s.muebles[s.activo].piezas;
+    return s;
+  }
+  function serializar() {
+    sincronizar();
+    return JSON.stringify(Object.assign({}, estado, { diseno: undefined, piezas: undefined }));
+  }
+  function sincronizar() {
+    const m = estado.muebles[estado.activo];
+    m.diseno = estado.diseno; m.piezas = estado.piezas;
   }
   function valoresIniciales(k) {
     const o = {};
@@ -315,15 +352,15 @@ if (typeof document !== 'undefined') {
   function cargar() {
     try {
       const s = JSON.parse(localStorage.getItem(CLAVE));
-      if (s && s.piezas && s.stock) {
+      if (s && s.stock && (s.piezas || s.muebles)) {
         // Migración: antes el diseño se copiaba a la lista; ahora el diseño se calcula solo.
         if (!s.v2) { s.v2 = true; if (s.diseno && s.diseno.el && s.diseno.el.length) s.piezas = []; }
-        return s;
+        return migrar(s);
       }
     } catch (e) {}
-    return porDefecto();
+    return migrar(porDefecto());
   }
-  function guardar() { localStorage.setItem(CLAVE, JSON.stringify(estado)); }
+  function guardar() { localStorage.setItem(CLAVE, serializar()); }
   const $ = id => document.getElementById(id);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmt = n => '₡' + Math.round(n).toLocaleString('es-CR');
@@ -417,7 +454,8 @@ if (typeof document !== 'undefined') {
   $('btn-imprimir').addEventListener('click', () => window.print());
 
   $('btn-export').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(estado, null, 2)], { type: 'application/json' });
+    sincronizar();
+    const blob = new Blob([JSON.stringify(Object.assign({}, estado, { diseno: undefined, piezas: undefined }), null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'mueble-' + new Date().toISOString().slice(0, 10) + '.json';
@@ -430,9 +468,9 @@ if (typeof document !== 'undefined') {
     rd.onload = () => {
       try {
         const d = JSON.parse(rd.result);
-        if (!Array.isArray(d.piezas) || !Array.isArray(d.stock)) throw 0;
+        if ((!Array.isArray(d.piezas) && !Array.isArray(d.muebles)) || !Array.isArray(d.stock)) throw 0;
         if (!confirm('Esto reemplaza el proyecto actual. ¿Continuar?')) return;
-        estado = Object.assign(porDefecto(), d); guardar(); iniciar();
+        estado = migrar(Object.assign(porDefecto(), d)); guardar(); iniciar();
       } catch (err) { alert('Archivo no válido.'); }
     };
     rd.readAsText(f);
@@ -445,6 +483,8 @@ if (typeof document !== 'undefined') {
 
   function pintarResultado(plan) {
     $('resultado').hidden = false;
+    const multi = estado.muebles.length > 1;
+    const nomM = i => estado.muebles[i] ? estado.muebles[i].nombre : '';
     const hayPrecio = plan.costoTotal > 0;
     $('resumen').innerHTML = `<div class="kpis">
       <div class="kpi"><b>${plan.totalTablas}</b><span>tablas en total a comprar</span></div>
@@ -458,31 +498,92 @@ if (typeof document !== 'undefined') {
     $('lista-cortes').innerHTML = plan.grupos.map(g => {
       const filas = new Map();
       g.tablas.forEach((t, ti) => t.piezas.forEach(p => {
-        const k = `${p.nombre}|${p.w}|${p.h}`;
-        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, w: p.w, h: p.h, cant: 0, tablas: new Set() });
+        const k = `${p.m}|${p.nombre}|${p.w}|${p.h}`;
+        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, m: p.m, w: p.w, h: p.h, cant: 0, tablas: new Set() });
         const f = filas.get(k); f.cant++; f.tablas.add(ti + 1);
       }));
       return `<div class="grupo"><b>Espesor ${g.espesor} cm — ${esc(g.stock.nombre)}</b>
-      <table class="cortes"><thead><tr><th>Pieza</th><th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
-      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
+      <table class="cortes"><thead><tr><th>Pieza</th>${multi ? '<th>Mueble</th>' : ''}<th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
+      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td>${multi ? `<td>${esc(nomM(f.m))}</td>` : ''}<td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
       </tbody></table></div>`;
     }).join('');
 
-    const mats = materialesDesdeDiseno(dis().el);
-    if (mats.length) $('lista-cortes').innerHTML += `<div class="grupo"><b>Otros materiales (no se cortan de tabla)</b><ul>${mats.map(m => `<li>${m.cant} × ${esc(m.nombre)}: ${num(m.largo)} cm de largo, Ø ${num(m.diametro)} cm</li>`).join('')}</ul></div>`;
+    const mats = todosLosMateriales();
+    if (mats.length) $('lista-cortes').innerHTML += `<div class="grupo"><b>Otros materiales (no se cortan de tabla)</b><ul>${mats.map(m => `<li>${m.cant} × ${esc(m.nombre)}${multi ? ' (' + esc(m.mueble) + ')' : ''}: ${num(m.largo)} cm de largo, Ø ${num(m.diametro)} cm</li>`).join('')}</ul></div>`;
     const nombresRes = [];
     plan.grupos.forEach(g => g.tablas.forEach(t => t.piezas.forEach(p => nombresRes.push(p.nombre))));
     $('leyenda-res').innerHTML = leyendaHTML(nombresRes);
+    let extra = '';
+    if (multi) {
+      extra += `<p class="hint"><b>Muebles:</b> ${estado.muebles.map((m, i) => `<b>M${i + 1}</b> = ${esc(m.nombre)}`).join(' · ')}</p>`;
+      if (!plan.errores.length) {
+        const separado = estado.muebles.reduce((t, _, i) => t + calcularPlan(piezasDeMueble(i), estado.stock, estado.kerf, estado.rotar, estado.unir).totalTablas, 0);
+        const ahorro = separado - plan.totalTablas;
+        extra += ahorro > 0
+          ? `<div class="aviso nota">♻ Cortando todos los muebles juntos y aprovechando los sobrantes comprás <b>${plan.totalTablas}</b> tablas en vez de ${separado} (cada mueble por separado). ¡Ahorrás ${ahorro}!</div>`
+          : `<div class="aviso nota">ℹ Cortando por separado necesitarías ${separado} tablas; juntos ${plan.totalTablas}.</div>`;
+      }
+      extra += '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar.</p>';
+    } else extra = '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar.</p>';
+    $('leyenda-res').innerHTML += extra;
     $('esquemas').innerHTML = plan.grupos.map(g => g.tablas.map((t, ti) => {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
       const rects = t.piezas.map(p => `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="${colorDe(p.nombre)}" stroke="#333" stroke-width="1"/>
-        <text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle">${esc(p.nombre)} ${num(p.w)}×${num(p.h)}</text></g>`).join('');
+        <text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle">${multi ? `<tspan font-weight="bold">M${p.m + 1}</tspan> ` : ''}${esc(p.nombre)} ${num(p.w)}×${num(p.h)}</text></g>`).join('');
+      const retazos = retazosDe(t, W, H, estado.kerf, 5).map(z => `<g><rect x="${z.x * sc}" y="${z.y * sc}" width="${z.w * sc}" height="${z.h * sc}" fill="none" stroke="#c33" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <text x="${(z.x + z.w / 2) * sc}" y="${(z.y + z.h / 2) * sc}" font-size="${fs * 0.9}" fill="#c33" text-anchor="middle" dominant-baseline="middle">sobra ${num(z.w)}×${num(z.h)}</text></g>`).join('');
       return `<div class="tabla-sch"><small>Tabla #${ti + 1} · ${esc(g.stock.nombre)} (${W}×${H}×${g.stock.espesor} cm)${t.piezas.some(p => p.rot) ? ' · incluye piezas giradas' : ''}</small>
-      <svg viewBox="0 0 800 ${H * sc}">${rects}</svg></div>`;
+      <svg viewBox="0 0 800 ${H * sc}">${rects}${retazos}</svg></div>`;
     }).join('')).join('');
     $('resultado').scrollIntoView({ behavior: 'smooth' });
   }
 
+
+  /* ---- Muebles ---- */
+  function pintarTabs() {
+    $('m-tabs').innerHTML = estado.muebles.map((m, i) => `<button class="tab${i === estado.activo ? ' act' : ''}" data-mi="${i}">${esc(m.nombre)}</button>`).join('');
+  }
+  function pintarMuebles() {
+    pintarTabs();
+    $('m-nombre').value = estado.muebles[estado.activo].nombre;
+    $('m-del').disabled = estado.muebles.length < 2;
+    const tot = todasLasPiezas().reduce((t, p) => t + p.cant, 0);
+    $('m-total').textContent = estado.muebles.length > 1
+      ? `Se calculan juntos ${estado.muebles.length} muebles (${tot} piezas en total) para aprovechar los sobrantes. Editando: ${estado.muebles[estado.activo].nombre}.`
+      : 'Si agregás otro mueble, sus piezas se cortan junto con las de este y se aprovechan los pedazos que sobran.';
+  }
+  function irAMueble(i) {
+    sincronizar();
+    estado.activo = i;
+    estado.diseno = estado.muebles[i].diseno; estado.piezas = estado.muebles[i].piezas;
+    selId = null; guardar(); iniciar();
+  }
+  $('m-tabs').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (b) irAMueble(+b.dataset.mi);
+  });
+  $('m-nombre').addEventListener('input', ev => {
+    estado.muebles[estado.activo].nombre = ev.target.value || ('Mueble ' + (estado.activo + 1)); guardar(); pintarTabs();
+  });
+  $('m-add').addEventListener('click', () => {
+    sincronizar();
+    estado.muebles.push({ nombre: 'Mueble ' + (estado.muebles.length + 1), diseno: nuevoDiseno(), piezas: [] });
+    irAMueble(estado.muebles.length - 1);
+  });
+  $('m-dup').addEventListener('click', () => {
+    sincronizar();
+    const o = estado.muebles[estado.activo], c = JSON.parse(JSON.stringify(o));
+    c.nombre = o.nombre + ' (copia)';
+    c.diseno.el.forEach(e => e.id = Date.now() + Math.random());
+    estado.muebles.push(c);
+    irAMueble(estado.muebles.length - 1);
+  });
+  $('m-del').addEventListener('click', () => {
+    if (estado.muebles.length < 2) return;
+    if (!confirm(`¿Eliminar "${estado.muebles[estado.activo].nombre}" con todo su diseño?`)) return;
+    estado.muebles.splice(estado.activo, 1);
+    estado.activo = Math.min(estado.activo, estado.muebles.length - 1);
+    irAMueble(estado.activo);
+  });
 
   /* ---- Notas ---- */
   $('notas').addEventListener('input', e => { estado.notas = e.target.value; guardar(); });
@@ -520,7 +621,16 @@ if (typeof document !== 'undefined') {
     cv.innerHTML = g;
     pintarResumenDiseno();
   }
-  function todasLasPiezas() { return piezasDesdeDiseno(dis().el).concat(estado.piezas); }
+  function piezasDeMueble(i) {
+    sincronizar();
+    const mu = estado.muebles[i];
+    return piezasDesdeDiseno(mu.diseno.el).concat(mu.piezas).map(p => Object.assign({}, p, { m: i }));
+  }
+  function todasLasPiezas() { return estado.muebles.flatMap((_, i) => piezasDeMueble(i)); }
+  function todosLosMateriales() {
+    sincronizar();
+    return estado.muebles.flatMap((mu, i) => materialesDesdeDiseno(mu.diseno.el).map(x => Object.assign({}, x, { mueble: mu.nombre })));
+  }
   function pintarLeyenda() {
     const nombres = dis().el.map(e => e.nombre);
     $('d-leyenda').innerHTML = nombres.length ? leyendaHTML(nombres) : '';
@@ -537,6 +647,7 @@ if (typeof document !== 'undefined') {
   }
   function pintarResumenDiseno() {
     pintarAuto();
+    if (typeof pintarMuebles === 'function' && estado.muebles.length > 1) $('m-total').textContent = `Se calculan juntos ${estado.muebles.length} muebles (${todasLasPiezas().reduce((t, p) => t + p.cant, 0)} piezas en total) para aprovechar los sobrantes. Editando: ${estado.muebles[estado.activo].nombre}.`;
     const d = dis(), ps = piezasDesdeDiseno(d.el);
     $('d-resumen').innerHTML = d.el.length
       ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${ps.reduce((t, p) => t + p.cant, 0)} piezas de madera:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
@@ -651,6 +762,7 @@ if (typeof document !== 'undefined') {
   $('d-canvas').addEventListener('pointercancel', finArrastre);
 
   function iniciar() {
+    pintarMuebles();
     $('notas').value = estado.notas || '';
     $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto; $('d-prof').value = dis().prof; $('d-esp').value = dis().esp;
     pintarTablaDiseno(); pintarCanvas();
@@ -662,4 +774,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

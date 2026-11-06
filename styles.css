@@ -62,3 +62,9 @@ textarea{width:100%;padding:8px;border:1px solid #c9b9a6;border-radius:6px;font-
 .leyenda i,i.sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid #0004;vertical-align:middle}
 i.sw{margin-right:6px}
 .tabla-sch svg{background:#f3ece1}
+.muebles-bar{background:#f7efe4;border-radius:8px;padding:10px;margin-bottom:12px}
+#m-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+#m-tabs .tab{margin:0;border-radius:6px 6px 0 0}
+#m-tabs .tab.act{background:#6b4423;color:#fff}
+.muebles-bar .row input{width:200px}
+button:disabled{opacity:.4;cursor:not-allowed}

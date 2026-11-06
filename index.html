@@ -34,6 +34,16 @@
 
   <section class="card">
     <h2>✏️ Diseñador (vista de frente)</h2>
+    <div class="muebles-bar">
+      <div id="m-tabs"></div>
+      <div class="row">
+        <label>Nombre de este mueble<input id="m-nombre" type="text"></label>
+        <button id="m-add" class="primary">+ Agregar otro mueble</button>
+        <button id="m-dup">⧉ Duplicar este mueble</button>
+        <button id="m-del" class="danger">🗑 Eliminar este mueble</button>
+      </div>
+      <p class="hint" id="m-total"></p>
+    </div>
     <p class="hint">Dibujá tu mueble con tablas para saber cuántas piezas necesitás. Agregá tablas horizontales o verticales, arrastralas con el dedo o el mouse, o ajustá sus medidas en la lista. Todo en cm.</p>
     <div class="row">
       <label>Ancho del mueble<input type="number" id="d-ancho" min="10" step="1"></label>
