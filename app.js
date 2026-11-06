@@ -4,18 +4,19 @@
 const EPS = 1e-6;
 
 // Empaca piezas (cada una {nombre,w,h}) en tablas W x H con cortes guillotina.
-function empacar(piezas, W, H, kerf, rotar, orden) {
+function empacar(piezas, W, H, kerf, rotar, orden, heur) {
   const lista = piezas.slice().sort(orden);
   const bins = [];
   for (const p of lista) {
-    let mejor = null; // {bin, idx, rot, score}
-    for (let b = 0; b < bins.length && !mejor; b++) {
-      mejor = mejorEspacio(bins[b], b, p, kerf, rotar);
+    // Buscar el mejor hueco en CUALQUIER tabla ya abierta (así se rellenan sobrantes de tablas previas).
+    let mejor = null;
+    for (let b = 0; b < bins.length; b++) {
+      const c = mejorEspacio(bins[b], b, p, kerf, rotar, heur);
+      if (c && (!mejor || c.score < mejor.score - EPS)) mejor = c;
     }
     if (!mejor) {
-      // Rect libre inicial con +kerf para que la última pieza no pague corte
       bins.push({ libres: [{ x: 0, y: 0, w: W + kerf, h: H + kerf }], piezas: [] });
-      mejor = mejorEspacio(bins[bins.length - 1], bins.length - 1, p, kerf, rotar);
+      mejor = mejorEspacio(bins[bins.length - 1], bins.length - 1, p, kerf, rotar, heur);
       if (!mejor) return null;
     }
     colocar(bins[mejor.bin], mejor, p, kerf);
@@ -23,7 +24,8 @@ function empacar(piezas, W, H, kerf, rotar, orden) {
   return bins;
 }
 
-function mejorEspacio(bin, b, p, kerf, rotar) {
+// heur: cómo puntuar un hueco (menor = mejor). bss=lado corto, bls=lado largo, baf=área sobrante.
+function mejorEspacio(bin, b, p, kerf, rotar, heur) {
   let mejor = null;
   const orient = [[p.w, p.h, false]];
   if (rotar && Math.abs(p.w - p.h) > EPS) orient.push([p.h, p.w, true]);
@@ -31,7 +33,11 @@ function mejorEspacio(bin, b, p, kerf, rotar) {
     for (const [w, h, rot] of orient) {
       const pw = w + kerf, ph = h + kerf;
       if (pw <= f.w + EPS && ph <= f.h + EPS) {
-        const score = Math.min(f.w - pw, f.h - ph);
+        const dw = f.w - pw, dh = f.h - ph;
+        let score;
+        if (heur === 'bls') score = Math.max(dw, dh);
+        else if (heur === 'baf') score = f.w * f.h - pw * ph;
+        else score = Math.min(dw, dh); // 'bss'
         if (!mejor || score < mejor.score - EPS) mejor = { bin: b, idx, rot, score, w, h };
       }
     }
@@ -72,22 +78,30 @@ function expandirTiras(lista, L, A, rotar) {
 }
 
 const ORDENES = [
-  (a, b) => b.w * b.h - a.w * a.h,
-  (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h),
-  (a, b) => b.h - a.h || b.w - a.w,
-  (a, b) => b.w - a.w || b.h - a.h,
+  (a, b) => b.w * b.h - a.w * a.h,                 // área desc
+  (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h), // lado largo desc
+  (a, b) => b.h - a.h || b.w - a.w,                // alto desc
+  (a, b) => b.w - a.w || b.h - a.h,                // largo desc
+  (a, b) => (b.w + b.h) - (a.w + a.h),             // perímetro desc
+  (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h), // lado corto desc
 ];
+const HEUR = ['bss', 'bls', 'baf'];
 
 function optimizar(piezas, W, H, kerf, rotar) {
   // piezas: [{nombre,w,h}] ya expandidas. W = largo tabla, H = ancho tabla.
   const orientadas = piezas.map(p => ({ ...p }));
   let mejor = null;
   for (const orden of ORDENES) {
-    const r = empacar(orientadas, W, H, kerf, rotar, orden);
-    if (!r) continue;
-    const area = r.reduce((s, b) => s + b.piezas.reduce((t, q) => t + q.w * q.h, 0), 0);
-    const cand = { bins: r, area };
-    if (!mejor || r.length < mejor.bins.length) mejor = cand;
+    for (const heur of HEUR) {
+      const r = empacar(orientadas, W, H, kerf, rotar, orden, heur);
+      if (!r) continue;
+      const usada = r.reduce((s, b) => s + b.piezas.reduce((t, q) => t + q.w * q.h, 0), 0);
+      const area = usada;
+      // Preferir menos tablas; a igualdad, concentrar el desperdicio (menos área usada en la última tabla).
+      const ult = r.length ? r[r.length - 1].piezas.reduce((t, q) => t + q.w * q.h, 0) : 0;
+      const cand = { bins: r, area, n: r.length, ult };
+      if (!mejor || cand.n < mejor.n - EPS || (Math.abs(cand.n - mejor.n) < EPS && cand.ult < mejor.ult - EPS)) mejor = cand;
+    }
   }
   return mejor;
 }
@@ -479,7 +493,7 @@ if (typeof document !== 'undefined') {
 
   $('btn-calcular').addEventListener('click', () => {
     if (!incluidos().length) { alert('Marcá con ✔ al menos una pestaña (mueble) para incluir en el cálculo.'); return; }
-    const plan = calcularPlan(todasLasPiezas(), estado.stock, estado.kerf, estado.rotar, estado.unir);
+    const plan = calcularPlan(todasLasPiezas(), estado.stock, estado.kerf, true, estado.unir);
     pintarResultado(plan);
   });
 
@@ -522,7 +536,7 @@ if (typeof document !== 'undefined') {
     if (multi) {
       extra += `<p class="hint"><b>Muebles:</b> ${incluidos().map(i => `<b>M${i + 1}</b> = ${esc(estado.muebles[i].nombre)}`).join(' · ')}</p>`;
       if (!plan.errores.length) {
-        const separado = incluidos().reduce((t, i) => t + calcularPlan(piezasDeMueble(i), estado.stock, estado.kerf, estado.rotar, estado.unir).totalTablas, 0);
+        const separado = incluidos().reduce((t, i) => t + calcularPlan(piezasDeMueble(i), estado.stock, estado.kerf, true, estado.unir).totalTablas, 0);
         const ahorro = separado - plan.totalTablas;
         extra += ahorro > 0
           ? `<div class="aviso nota">♻ Cortando todos los muebles juntos y aprovechando los sobrantes comprás <b>${plan.totalTablas}</b> tablas en vez de ${separado} (cada mueble por separado). ¡Ahorrás ${ahorro}!</div>`
