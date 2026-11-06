@@ -330,6 +330,7 @@ if (typeof document !== 'undefined') {
       if (!m.diseno.prof) m.diseno.prof = 30;
       if (!m.diseno.esp) m.diseno.esp = 2;
       if (!Array.isArray(m.piezas)) m.piezas = [];
+      if (m.incluir === undefined) m.incluir = true;
     });
     if (!(s.activo >= 0 && s.activo < s.muebles.length)) s.activo = 0;
     s.diseno = s.muebles[s.activo].diseno;
@@ -477,13 +478,14 @@ if (typeof document !== 'undefined') {
   });
 
   $('btn-calcular').addEventListener('click', () => {
+    if (!incluidos().length) { alert('Marcá con ✔ al menos una pestaña (mueble) para incluir en el cálculo.'); return; }
     const plan = calcularPlan(todasLasPiezas(), estado.stock, estado.kerf, estado.rotar, estado.unir);
     pintarResultado(plan);
   });
 
   function pintarResultado(plan) {
     $('resultado').hidden = false;
-    const multi = estado.muebles.length > 1;
+    const multi = incluidos().length > 1;
     const nomM = i => estado.muebles[i] ? estado.muebles[i].nombre : '';
     const hayPrecio = plan.costoTotal > 0;
     $('resumen').innerHTML = `<div class="kpis">
@@ -491,6 +493,9 @@ if (typeof document !== 'undefined') {
       ${plan.grupos.map(g => `<div class="kpi"><b>${g.n}</b><span>${esc(g.stock.nombre)}<br>${g.stock.largo}×${g.stock.ancho}×${g.stock.espesor} cm · desperdicio ${Math.round(g.desperdicio * 100)}%</span></div>`).join('')}
       ${hayPrecio ? `<div class="kpi"><b>${fmt(plan.costoTotal)}</b><span>costo estimado</span></div>` : ''}
     </div>`;
+    const noInc = estado.muebles.filter(m => m.incluir === false).map(m => m.nombre);
+    $('incluidos-res').innerHTML = estado.muebles.length > 1
+      ? `<p class="hint">Calculado con: <b>${incluidos().map(i => esc(estado.muebles[i].nombre)).join(', ')}</b>${noInc.length ? ` · No incluidos: ${noInc.map(esc).join(', ')}` : ''}</p>` : '';
     $('notas-print').textContent = estado.notas ? '📝 ' + estado.notas : '';
     $('avisos').innerHTML = plan.errores.map(m => `<div class="aviso">⚠️ ${esc(m)}</div>`).join('') +
       plan.grupos.filter(g => g.tiras).map(g => `<div class="aviso nota">ℹ️ En ${g.espesor} cm, ${g.tiras} tiras se deben unir con cola para armar piezas más anchas que la tabla (las tiras ya incluyen su corte).</div>`).join('');
@@ -515,9 +520,9 @@ if (typeof document !== 'undefined') {
     $('leyenda-res').innerHTML = leyendaHTML(nombresRes);
     let extra = '';
     if (multi) {
-      extra += `<p class="hint"><b>Muebles:</b> ${estado.muebles.map((m, i) => `<b>M${i + 1}</b> = ${esc(m.nombre)}`).join(' · ')}</p>`;
+      extra += `<p class="hint"><b>Muebles:</b> ${incluidos().map(i => `<b>M${i + 1}</b> = ${esc(estado.muebles[i].nombre)}`).join(' · ')}</p>`;
       if (!plan.errores.length) {
-        const separado = estado.muebles.reduce((t, _, i) => t + calcularPlan(piezasDeMueble(i), estado.stock, estado.kerf, estado.rotar, estado.unir).totalTablas, 0);
+        const separado = incluidos().reduce((t, i) => t + calcularPlan(piezasDeMueble(i), estado.stock, estado.kerf, estado.rotar, estado.unir).totalTablas, 0);
         const ahorro = separado - plan.totalTablas;
         extra += ahorro > 0
           ? `<div class="aviso nota">♻ Cortando todos los muebles juntos y aprovechando los sobrantes comprás <b>${plan.totalTablas}</b> tablas en vez de ${separado} (cada mueble por separado). ¡Ahorrás ${ahorro}!</div>`
@@ -541,16 +546,13 @@ if (typeof document !== 'undefined') {
 
   /* ---- Muebles ---- */
   function pintarTabs() {
-    $('m-tabs').innerHTML = estado.muebles.map((m, i) => `<button class="tab${i === estado.activo ? ' act' : ''}" data-mi="${i}">${esc(m.nombre)}</button>`).join('');
+    $('m-tabs').innerHTML = estado.muebles.map((m, i) => `<span class="tabw${m.incluir === false ? ' off' : ''}"><input type="checkbox" data-inc="${i}" title="Incluir en el cálculo de tablas"${m.incluir !== false ? ' checked' : ''}><button class="tab${i === estado.activo ? ' act' : ''}" data-mi="${i}">${esc(m.nombre)}</button></span>`).join('');
   }
   function pintarMuebles() {
     pintarTabs();
     $('m-nombre').value = estado.muebles[estado.activo].nombre;
     $('m-del').disabled = estado.muebles.length < 2;
-    const tot = todasLasPiezas().reduce((t, p) => t + p.cant, 0);
-    $('m-total').textContent = estado.muebles.length > 1
-      ? `Se calculan juntos ${estado.muebles.length} muebles (${tot} piezas en total) para aprovechar los sobrantes. Editando: ${estado.muebles[estado.activo].nombre}.`
-      : 'Si agregás otro mueble, sus piezas se cortan junto con las de este y se aprovechan los pedazos que sobran.';
+    $('m-total').textContent = textoTotal();
   }
   function irAMueble(i) {
     sincronizar();
@@ -560,6 +562,10 @@ if (typeof document !== 'undefined') {
   }
   $('m-tabs').addEventListener('click', ev => {
     const b = ev.target.closest('button'); if (b) irAMueble(+b.dataset.mi);
+  });
+  $('m-tabs').addEventListener('change', ev => {
+    const c = ev.target.closest('input[data-inc]'); if (!c) return;
+    estado.muebles[+c.dataset.inc].incluir = c.checked; guardar(); pintarTabs(); $('m-total').textContent = textoTotal();
   });
   $('m-nombre').addEventListener('input', ev => {
     estado.muebles[estado.activo].nombre = ev.target.value || ('Mueble ' + (estado.activo + 1)); guardar(); pintarTabs();
@@ -572,7 +578,8 @@ if (typeof document !== 'undefined') {
   $('m-dup').addEventListener('click', () => {
     sincronizar();
     const o = estado.muebles[estado.activo], c = JSON.parse(JSON.stringify(o));
-    c.nombre = o.nombre + ' (copia)';
+    c.nombre = o.nombre + ' (opción 2)';
+    c.incluir = true;
     c.diseno.el.forEach(e => e.id = Date.now() + Math.random());
     estado.muebles.push(c);
     irAMueble(estado.muebles.length - 1);
@@ -626,10 +633,19 @@ if (typeof document !== 'undefined') {
     const mu = estado.muebles[i];
     return piezasDesdeDiseno(mu.diseno.el).concat(mu.piezas).map(p => Object.assign({}, p, { m: i }));
   }
-  function todasLasPiezas() { return estado.muebles.flatMap((_, i) => piezasDeMueble(i)); }
+  function incluidos() { return estado.muebles.map((m, i) => i).filter(i => estado.muebles[i].incluir !== false); }
+  function todasLasPiezas() { return incluidos().flatMap(i => piezasDeMueble(i)); }
+  function textoTotal() {
+    const inc = incluidos(), act = estado.muebles[estado.activo];
+    const tot = todasLasPiezas().reduce((t, p) => t + p.cant, 0);
+    if (estado.muebles.length < 2) return 'Si agregás otro mueble, sus piezas se cortan junto con las de este y se aprovechan los pedazos que sobran. También sirve para guardar otra opción de diseño.';
+    let t = `Marcá con ✔ las pestañas que querés incluir en el cálculo de tablas. Ahora: ${inc.length} de ${estado.muebles.length} (${tot} piezas en total).`;
+    if (act.incluir === false) t += ` ⚠ “${act.nombre}” NO está incluido en el cálculo.`;
+    return t;
+  }
   function todosLosMateriales() {
     sincronizar();
-    return estado.muebles.flatMap((mu, i) => materialesDesdeDiseno(mu.diseno.el).map(x => Object.assign({}, x, { mueble: mu.nombre })));
+    return estado.muebles.flatMap((mu, i) => mu.incluir === false ? [] : materialesDesdeDiseno(mu.diseno.el).map(x => Object.assign({}, x, { mueble: mu.nombre })));
   }
   function pintarLeyenda() {
     const nombres = dis().el.map(e => e.nombre);
@@ -647,7 +663,7 @@ if (typeof document !== 'undefined') {
   }
   function pintarResumenDiseno() {
     pintarAuto();
-    if (typeof pintarMuebles === 'function' && estado.muebles.length > 1) $('m-total').textContent = `Se calculan juntos ${estado.muebles.length} muebles (${todasLasPiezas().reduce((t, p) => t + p.cant, 0)} piezas en total) para aprovechar los sobrantes. Editando: ${estado.muebles[estado.activo].nombre}.`;
+    $('m-total').textContent = textoTotal();
     const d = dis(), ps = piezasDesdeDiseno(d.el);
     $('d-resumen').innerHTML = d.el.length
       ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${ps.reduce((t, p) => t + p.cant, 0)} piezas de madera:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
