@@ -196,6 +196,12 @@ const PLANTILLAS = {
     ],
     dibujo: v => dibujoCaja(v, v.repisas, true),
   },
+  otro: {
+    nombre: 'Otro (digitar mis propias piezas)',
+    campos: [],
+    piezas: () => [],
+    dibujo: () => '<text x="150" y="95" text-anchor="middle" font-size="13" fill="#6d5f52">Diseño personalizado</text><text x="150" y="115" text-anchor="middle" font-size="11" fill="#6d5f52">Agregá tus piezas en la sección 2</text>',
+  },
 };
 
 function r(n) { return Math.round(n * 100) / 100; }
@@ -276,7 +282,9 @@ if (typeof document !== 'undefined') {
     sel.value = estado.plantilla;
     const t = PLANTILLAS[estado.plantilla];
     const vals = Object.assign(valoresIniciales(estado.plantilla), estado.valores[estado.plantilla] || {});
-    $('plantilla-campos').innerHTML = t.campos.map(c =>
+    const custom = estado.plantilla === 'otro';
+    $('btn-generar').hidden = custom;
+    $('plantilla-campos').innerHTML = custom ? '<p class="hint">Sin plantilla: digitá tus piezas (nombre, medidas, espesor y cantidad) en la sección 2 con “+ Agregar pieza”. Las piezas que ya tengas se conservan.</p>' : t.campos.map(c =>
       `<label>${c[1]} (cm)<input type="number" step="0.1" min="0" data-campo="${c[0]}" value="${vals[c[0]]}"></label>`).join('');
     pintarVista();
   }
