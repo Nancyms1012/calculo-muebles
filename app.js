@@ -230,8 +230,7 @@ const PLANTILLAS = {
 const COLORES = [
   ['Techo / superior', /techo|superior|tapa/, '#6699FF'],
   ['Piso / inferior', /piso|inferior|base/, '#a77be0'],
-  ['Costado', /costado|lateral/, '#f09a4a'],
-  ['División', /divisi/, '#ee6f8b'],
+  ['Vertical (costado / división)', /costado|lateral|divisi|vertical/, '#FF0DFF'],
   ['Repisa', /repisa|estante/, '#66FFFF'],
   ['Tubo para ropa', /tubo/, '#a9b2ba'],
 ];
@@ -557,8 +556,8 @@ if (typeof document !== 'undefined') {
       division: { nombre: 'División', orient: 'V', largo: Math.max(1, r(d.alto - 2 * e)), x: r(d.ancho / 2 - e / 2), y: e },
       repisa:   { nombre: 'Repisa', orient: 'H', largo: interior, x: e, y: Math.min(d.alto - 2 * e, r(d.alto * (n + 1) / 5)) },
       tubo:     { nombre: 'Tubo para ropa', orient: 'H', largo: interior, x: e, y: 12, esp: 3, prof: 0, tubo: true },
-      h:        { nombre: 'Tabla', orient: 'H', largo: d.ancho, x: 0, y: Math.min(d.alto - e, d.el.length * 10) },
-      v:        { nombre: 'Tabla', orient: 'V', largo: d.alto, x: 0, y: 0 },
+      h:        { nombre: 'Tabla horizontal', orient: 'H', largo: d.ancho, x: 0, y: Math.min(d.alto - e, d.el.length * 10) },
+      v:        { nombre: 'Tabla vertical', orient: 'V', largo: d.alto, x: 0, y: 0 },
     };
     const el = Object.assign(base, defs[tipo]);
     clampEl(el);
