@@ -505,11 +505,16 @@ if (typeof document !== 'undefined') {
     d.el.forEach(e => {
       const q = rectDe(e);
       g += `<rect class="el${e.id === selId ? ' sel' : ''}${e.tubo ? ' tubo' : ''}" ${e.tubo ? `rx="${q.h / 2}"` : ''} data-id="${e.id}" style="fill:${colorDe(e.nombre)}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
-      if (Math.max(q.w, q.h) > fs * 3) {
-        const vert = q.h > q.w;
+      const medidas = e.tubo ? `${num(e.largo)} cm · Ø${num(e.esp)}` : `${num(e.largo)}×${num(e.prof)}×${num(e.esp)}`;
+      const largoVisible = Math.max(q.w, q.h), fz = fs * 0.8, anchoCh = fz * 0.55;
+      let txt = `${e.nombre} ${medidas}`;
+      if (txt.length * anchoCh > largoVisible * 0.95) txt = medidas;
+      if (txt.length * anchoCh <= largoVisible * 0.98) {
+        const cx = e.x + q.w / 2, cy = e.y + q.h / 2, vert = q.h > q.w;
+        const attrs = `font-size="${fz}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="${fz * 0.22}" paint-order="stroke" stroke-linejoin="round"`;
         g += vert
-          ? `<text transform="translate(${e.x + q.w / 2},${e.y + q.h / 2}) rotate(-90)" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="middle">${esc(e.nombre)}</text>`
-          : `<text x="${e.x + q.w / 2}" y="${e.y + q.h / 2}" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="middle">${esc(e.nombre)}</text>`;
+          ? `<text transform="translate(${cx},${cy}) rotate(-90)" ${attrs}>${esc(txt)}</text>`
+          : `<text x="${cx}" y="${cy}" ${attrs}>${esc(txt)}</text>`;
       }
     });
     cv.innerHTML = g;
