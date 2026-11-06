@@ -707,9 +707,20 @@ if (typeof document !== 'undefined') {
   $('d-esp').addEventListener('input', ev => { dis().esp = Math.max(0.5, parseFloat(ev.target.value) || 0.5); guardar(); });
   $('d-ancho').addEventListener('input', e => { dis().ancho = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
   $('d-alto').addEventListener('input', e => { dis().alto = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
-  $('d-prof').addEventListener('input', e => { dis().prof = Math.max(1, parseFloat(e.target.value) || 1); guardar(); pintarCanvas(); });
+  $('d-prof').addEventListener('change', e => {
+    const d = dis(); d.prof = Math.max(1, parseFloat(e.target.value) || 1); e.target.value = d.prof;
+    const tablas = d.el.filter(x => !x.tubo);
+    if (tablas.length && tablas.some(x => x.prof !== d.prof)) {
+      if (confirm(`¿Poner la profundidad ${d.prof} cm en las ${tablas.length} tablas del diseño?`)) tablas.forEach(x => x.prof = d.prof);
+    }
+    guardar(); pintarTablaDiseno(); pintarCanvas();
+  });
+  $('d-prof').addEventListener('input', e => { dis().prof = Math.max(1, parseFloat(e.target.value) || 1); guardar(); });
   $('d-aplicar-prof').addEventListener('click', () => {
-    dis().el.forEach(x => x.prof = dis().prof); guardar(); pintarTablaDiseno(); pintarCanvas();
+    const d = dis(), tablas = d.el.filter(x => !x.tubo);
+    if (!tablas.length) { alert('Todavía no hay tablas en el diseño.'); return; }
+    tablas.forEach(x => x.prof = d.prof); guardar(); pintarTablaDiseno(); pintarCanvas();
+    alert(`Listo: profundidad ${d.prof} cm aplicada a ${tablas.length} tablas.`);
   });
   function borrarSelDiseno() {
     const d = dis(), i = d.el.findIndex(x => x.id === selId);
