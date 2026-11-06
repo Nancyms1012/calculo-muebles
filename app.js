@@ -153,9 +153,21 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
 function piezasDesdeDiseno(el) {
   const m = new Map();
   for (const e of el) {
+    if (e.tubo) continue;
     const p = { nombre: e.nombre || 'Pieza', largo: r(e.largo), ancho: r(e.prof), espesor: r(e.esp), cant: 1 };
     const k = [p.nombre, p.largo, p.ancho, p.espesor].join('|');
     if (m.has(k)) m.get(k).cant++; else m.set(k, p);
+  }
+  return [...m.values()];
+}
+
+// Tubos para ropa: no se cortan de tabla, se listan aparte.
+function materialesDesdeDiseno(el) {
+  const m = new Map();
+  for (const e of el) {
+    if (!e.tubo) continue;
+    const k = r(e.largo) + '|' + r(e.esp);
+    if (m.has(k)) m.get(k).cant++; else m.set(k, { nombre: e.nombre || 'Tubo para ropa', largo: r(e.largo), diametro: r(e.esp), cant: 1 });
   }
   return [...m.values()];
 }
@@ -269,7 +281,7 @@ if (typeof document !== 'undefined') {
         { nombre: 'Tabla 7×7×300', largo: 300, ancho: 7, espesor: 7, precio: 0 },
       ],
       kerf: 0.3, rotar: false, unir: true, notas: '',
-      diseno: { ancho: 80, alto: 180, prof: 30, el: [] },
+      diseno: { ancho: 80, alto: 180, prof: 30, esp: 2, el: [] },
     };
   }
   function valoresIniciales(k) {
@@ -426,6 +438,8 @@ if (typeof document !== 'undefined') {
       </tbody></table></div>`;
     }).join('');
 
+    const mats = materialesDesdeDiseno(dis().el);
+    if (mats.length) $('lista-cortes').innerHTML += `<div class="grupo"><b>Otros materiales (no se cortan de tabla)</b><ul>${mats.map(m => `<li>${m.cant} × ${esc(m.nombre)}: ${num(m.largo)} cm de largo, Ø ${num(m.diametro)} cm</li>`).join('')}</ul></div>`;
     $('esquemas').innerHTML = plan.grupos.map(g => g.tablas.map((t, ti) => {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
       const rects = t.piezas.map(p => `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="#8fbf7a" stroke="#2f5d1f"/>
@@ -443,7 +457,7 @@ if (typeof document !== 'undefined') {
   /* ---- Diseñador ---- */
   const NS = 'http://www.w3.org/2000/svg';
   let selId = null, arrastre = null;
-  function dis() { if (!estado.diseno) estado.diseno = { ancho: 80, alto: 180, prof: 30, el: [] }; if (!estado.diseno.prof) estado.diseno.prof = 30; return estado.diseno; }
+  function dis() { if (!estado.diseno) estado.diseno = { ancho: 80, alto: 180, prof: 30, esp: 2, el: [] }; if (!estado.diseno.prof) estado.diseno.prof = 30; if (!estado.diseno.esp) estado.diseno.esp = 2; return estado.diseno; }
   function rectDe(e) { return e.orient === 'V' ? { w: e.esp, h: e.largo } : { w: e.largo, h: e.esp }; }
 
   function pintarCanvas() {
@@ -457,7 +471,7 @@ if (typeof document !== 'undefined') {
     g += `<text transform="translate(${-pad + fs},${d.alto / 2}) rotate(-90)" font-size="${fs}" text-anchor="middle">${d.alto} cm</text>`;
     d.el.forEach(e => {
       const q = rectDe(e);
-      g += `<rect class="el${e.id === selId ? ' sel' : ''}" data-id="${e.id}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
+      g += `<rect class="el${e.id === selId ? ' sel' : ''}${e.tubo ? ' tubo' : ''}" ${e.tubo ? `rx="${q.h / 2}"` : ''} data-id="${e.id}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
       if (Math.max(q.w, q.h) > fs * 3) {
         const vert = q.h > q.w;
         g += vert
@@ -471,7 +485,8 @@ if (typeof document !== 'undefined') {
   function pintarResumenDiseno() {
     const d = dis(), ps = piezasDesdeDiseno(d.el);
     $('d-resumen').innerHTML = d.el.length
-      ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${d.el.length} piezas:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
+      ? `<b>Mueble ${d.ancho} × ${d.alto} × ${d.prof} cm (ancho × alto × fondo) — ${ps.reduce((t, p) => t + p.cant, 0)} piezas de madera:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
+        + (materialesDesdeDiseno(d.el).length ? '<br><b>Otros materiales:</b> ' + materialesDesdeDiseno(d.el).map(m => `${m.cant} × ${esc(m.nombre)} de ${num(m.largo)} cm (Ø ${num(m.diametro)} cm)`).join(' · ') : '')
       : 'Todavía no hay tablas en el diseño.';
   }
   function pintarTablaDiseno() {
@@ -481,20 +496,34 @@ if (typeof document !== 'undefined') {
       ${['largo', 'esp', 'prof', 'x', 'y'].map(k => `<td><input type="number" step="0.5" min="0" data-d="${i}" data-k="${k}" value="${e[k]}"></td>`).join('')}
       <td><button data-dup="${i}" title="Duplicar">⧉</button><button class="danger" data-deld="${i}" title="Eliminar esta tabla">🗑</button></td></tr>`).join('');
   }
-  function nuevoEl(orient) {
-    const d = dis(), n = d.el.length;
-    const e = { id: Date.now() + Math.random(), nombre: orient === 'H' ? 'Repisa' : 'Lateral', orient,
-      largo: orient === 'H' ? d.ancho : d.alto, esp: 2, prof: d.prof, x: 0, y: 0 };
-    if (orient === 'H') e.y = Math.min(d.alto - e.esp, n * 10);
-    selId = e.id; d.el.push(e); guardar(); pintarTablaDiseno(); pintarCanvas();
+  function nuevoEl(tipo) {
+    const d = dis(), e = d.esp, n = d.el.filter(x => x.tipo === tipo).length;
+    const base = { id: Date.now() + Math.random(), tipo, esp: e, prof: d.prof };
+    const interior = Math.max(1, r(d.ancho - 2 * e));
+    const defs = {
+      techo:    { nombre: 'Techo / superior', orient: 'H', largo: d.ancho, x: 0, y: 0 },
+      piso:     { nombre: 'Piso / inferior', orient: 'H', largo: d.ancho, x: 0, y: d.alto - e },
+      costado:  { nombre: 'Costado', orient: 'V', largo: d.alto, x: n % 2 === 0 ? 0 : d.ancho - e, y: 0 },
+      division: { nombre: 'División', orient: 'V', largo: Math.max(1, r(d.alto - 2 * e)), x: r(d.ancho / 2 - e / 2), y: e },
+      repisa:   { nombre: 'Repisa', orient: 'H', largo: interior, x: e, y: Math.min(d.alto - 2 * e, r(d.alto * (n + 1) / 5)) },
+      tubo:     { nombre: 'Tubo para ropa', orient: 'H', largo: interior, x: e, y: 12, esp: 3, prof: 0, tubo: true },
+      h:        { nombre: 'Tabla', orient: 'H', largo: d.ancho, x: 0, y: Math.min(d.alto - e, d.el.length * 10) },
+      v:        { nombre: 'Tabla', orient: 'V', largo: d.alto, x: 0, y: 0 },
+    };
+    const el = Object.assign(base, defs[tipo]);
+    clampEl(el);
+    selId = el.id; d.el.push(el); guardar(); pintarTablaDiseno(); pintarCanvas();
   }
   function clampEl(e) {
     const d = dis(), q = rectDe(e);
     e.x = Math.max(0, Math.min(d.ancho - q.w, e.x));
     e.y = Math.max(0, Math.min(d.alto - q.h, e.y));
   }
-  $('d-add-h').addEventListener('click', () => nuevoEl('H'));
-  $('d-add-v').addEventListener('click', () => nuevoEl('V'));
+  $('d-botones').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    nuevoEl(b.dataset.tipo || (b.id === 'd-add-h' ? 'h' : 'v'));
+  });
+  $('d-esp').addEventListener('input', ev => { dis().esp = Math.max(0.5, parseFloat(ev.target.value) || 0.5); guardar(); });
   $('d-ancho').addEventListener('input', e => { dis().ancho = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
   $('d-alto').addEventListener('input', e => { dis().alto = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
   $('d-prof').addEventListener('input', e => { dis().prof = Math.max(1, parseFloat(e.target.value) || 1); guardar(); pintarCanvas(); });
@@ -576,7 +605,7 @@ if (typeof document !== 'undefined') {
 
   function iniciar() {
     $('notas').value = estado.notas || '';
-    $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto; $('d-prof').value = dis().prof;
+    $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto; $('d-prof').value = dis().prof; $('d-esp').value = dis().esp;
     pintarTablaDiseno(); pintarCanvas();
     $('kerf').value = estado.kerf;
     $('rotar').checked = !!estado.rotar;
@@ -586,4 +615,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { calcularPlan, PLANTILLAS, piezasDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

@@ -54,3 +54,6 @@ textarea{width:100%;padding:8px;border:1px solid #c9b9a6;border-radius:6px;font-
 #d-tabla td input{min-width:56px}
 #notas-print{white-space:pre-wrap;background:#faf6f0;border-left:4px solid #6b4423;padding:8px;margin:8px 0;border-radius:4px}
 #notas-print:empty{display:none}
+.canvas rect.el.tubo{fill:#9aa3ab;stroke:#4a525a}
+.canvas rect.el.tubo.sel{fill:#c0c8d0;stroke:#c33}
+#d-botones{margin-bottom:6px}

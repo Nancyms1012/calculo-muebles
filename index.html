@@ -39,11 +39,19 @@
       <label>Ancho del mueble<input type="number" id="d-ancho" min="10" step="1"></label>
       <label>Alto del mueble<input type="number" id="d-alto" min="10" step="1"></label>
       <label>Profundidad (fondo) del mueble<input type="number" id="d-prof" min="1" step="1"></label>
+      <label>Espesor de las tablas<input type="number" id="d-esp" min="0.5" step="0.1"></label>
       <button id="d-aplicar-prof" title="Pone esta profundidad en todas las tablas del diseño">Aplicar a todas las tablas</button>
     </div>
-    <div>
-      <button id="d-add-h" class="primary">+ Tabla horizontal</button>
-      <button id="d-add-v" class="primary">+ Tabla vertical</button>
+    <p class="hint"><b>Agregar al diseño:</b></p>
+    <div id="d-botones">
+      <button class="primary" data-tipo="techo">+ Techo / superior</button>
+      <button class="primary" data-tipo="piso">+ Piso / inferior</button>
+      <button class="primary" data-tipo="costado">+ Costado</button>
+      <button class="primary" data-tipo="division">+ División</button>
+      <button class="primary" data-tipo="repisa">+ Repisa</button>
+      <button class="primary" data-tipo="tubo">+ Tubo para ropa</button>
+      <button id="d-add-h">+ Otra horizontal</button>
+      <button id="d-add-v">+ Otra vertical</button>
     </div>
     <svg id="d-canvas" class="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
     <p class="hint">“Profundidad” es el fondo de la tabla (lo que no se ve de frente) y pasa a ser el ancho de la pieza.</p>
