@@ -150,6 +150,16 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
   };
 }
 
+function piezasDesdeDiseno(el) {
+  const m = new Map();
+  for (const e of el) {
+    const p = { nombre: e.nombre || 'Pieza', largo: r(e.largo), ancho: r(e.prof), espesor: r(e.esp), cant: 1 };
+    const k = [p.nombre, p.largo, p.ancho, p.espesor].join('|');
+    if (m.has(k)) m.get(k).cant++; else m.set(k, p);
+  }
+  return [...m.values()];
+}
+
 /* ====== PLANTILLAS ====== */
 const PLANTILLAS = {
   mesa: {
@@ -258,7 +268,8 @@ if (typeof document !== 'undefined') {
         { nombre: 'Tabla 3×30×300', largo: 300, ancho: 30, espesor: 3, precio: 0 },
         { nombre: 'Tabla 7×7×300', largo: 300, ancho: 7, espesor: 7, precio: 0 },
       ],
-      kerf: 0.3, rotar: false, unir: true,
+      kerf: 0.3, rotar: false, unir: true, notas: '',
+      diseno: { ancho: 80, alto: 180, el: [] },
     };
   }
   function valoresIniciales(k) {
@@ -387,6 +398,7 @@ if (typeof document !== 'undefined') {
       ${plan.grupos.map(g => `<div class="kpi"><b>${g.n}</b><span>${esc(g.stock.nombre)}<br>${g.stock.largo}×${g.stock.ancho}×${g.stock.espesor} cm · desperdicio ${Math.round(g.desperdicio * 100)}%</span></div>`).join('')}
       ${hayPrecio ? `<div class="kpi"><b>${fmt(plan.costoTotal)}</b><span>costo estimado</span></div>` : ''}
     </div>`;
+    $('notas-print').textContent = estado.notas ? '📝 ' + estado.notas : '';
     $('avisos').innerHTML = plan.errores.map(m => `<div class="aviso">⚠️ ${esc(m)}</div>`).join('') +
       plan.grupos.filter(g => g.tiras).map(g => `<div class="aviso nota">ℹ️ En ${g.espesor} cm, ${g.tiras} tiras se deben unir con cola para armar piezas más anchas que la tabla (las tiras ya incluyen su corte).</div>`).join('');
 
@@ -413,7 +425,128 @@ if (typeof document !== 'undefined') {
     $('resultado').scrollIntoView({ behavior: 'smooth' });
   }
 
+
+  /* ---- Notas ---- */
+  $('notas').addEventListener('input', e => { estado.notas = e.target.value; guardar(); });
+
+  /* ---- Diseñador ---- */
+  const NS = 'http://www.w3.org/2000/svg';
+  let selId = null, arrastre = null;
+  function dis() { if (!estado.diseno) estado.diseno = { ancho: 80, alto: 180, el: [] }; return estado.diseno; }
+  function rectDe(e) { return e.orient === 'V' ? { w: e.esp, h: e.largo } : { w: e.largo, h: e.esp }; }
+
+  function pintarCanvas() {
+    const d = dis(), cv = $('d-canvas'), pad = Math.max(d.ancho, d.alto) * 0.05 + 2;
+    cv.setAttribute('viewBox', `${-pad} ${-pad} ${d.ancho + 2 * pad} ${d.alto + 2 * pad}`);
+    const fs = Math.max(d.ancho, d.alto) / 45;
+    let g = `<rect x="0" y="0" width="${d.ancho}" height="${d.alto}" fill="#fff" stroke="#999" stroke-dasharray="2 2" stroke-width=".3"/>`;
+    for (let x = 10; x < d.ancho; x += 10) g += `<line x1="${x}" y1="0" x2="${x}" y2="${d.alto}" stroke="#eee" stroke-width=".2"/>`;
+    for (let y = 10; y < d.alto; y += 10) g += `<line x1="0" y1="${y}" x2="${d.ancho}" y2="${y}" stroke="#eee" stroke-width=".2"/>`;
+    g += `<text x="${d.ancho / 2}" y="${d.alto + pad - 1}" font-size="${fs}" text-anchor="middle">${d.ancho} cm</text>`;
+    g += `<text transform="translate(${-pad + fs},${d.alto / 2}) rotate(-90)" font-size="${fs}" text-anchor="middle">${d.alto} cm</text>`;
+    d.el.forEach(e => {
+      const q = rectDe(e);
+      g += `<rect class="el${e.id === selId ? ' sel' : ''}" data-id="${e.id}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
+      if (Math.max(q.w, q.h) > fs * 3) {
+        const vert = q.h > q.w;
+        g += vert
+          ? `<text transform="translate(${e.x + q.w / 2},${e.y + q.h / 2}) rotate(-90)" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="middle">${esc(e.nombre)}</text>`
+          : `<text x="${e.x + q.w / 2}" y="${e.y + q.h / 2}" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="middle">${esc(e.nombre)}</text>`;
+      }
+    });
+    cv.innerHTML = g;
+    pintarResumenDiseno();
+  }
+  function pintarResumenDiseno() {
+    const d = dis(), ps = piezasDesdeDiseno(d.el);
+    $('d-resumen').innerHTML = d.el.length
+      ? `<b>${d.el.length} piezas en el diseño:</b> ` + ps.map(p => `${p.cant} × ${esc(p.nombre)} (${num(p.largo)}×${num(p.ancho)}×${num(p.espesor)})`).join(' · ')
+      : 'Todavía no hay tablas en el diseño.';
+  }
+  function pintarTablaDiseno() {
+    $('d-tabla').tBodies[0].innerHTML = dis().el.map((e, i) => `<tr${e.id === selId ? ' style="background:#fbeede"' : ''}>
+      <td><input data-d="${i}" data-k="nombre" value="${esc(e.nombre)}"></td>
+      <td><select data-d="${i}" data-k="orient"><option value="H"${e.orient === 'H' ? ' selected' : ''}>Horizontal</option><option value="V"${e.orient === 'V' ? ' selected' : ''}>Vertical</option></select></td>
+      ${['largo', 'esp', 'prof', 'x', 'y'].map(k => `<td><input type="number" step="0.5" min="0" data-d="${i}" data-k="${k}" value="${e[k]}"></td>`).join('')}
+      <td><button data-dup="${i}" title="Duplicar">⧉</button><button data-deld="${i}" title="Eliminar">✖</button></td></tr>`).join('');
+  }
+  function nuevoEl(orient) {
+    const d = dis(), n = d.el.length;
+    const e = { id: Date.now() + Math.random(), nombre: orient === 'H' ? 'Repisa' : 'Lateral', orient,
+      largo: orient === 'H' ? d.ancho : d.alto, esp: 2, prof: 30, x: 0, y: 0 };
+    if (orient === 'H') e.y = Math.min(d.alto - e.esp, n * 10);
+    selId = e.id; d.el.push(e); guardar(); pintarTablaDiseno(); pintarCanvas();
+  }
+  function clampEl(e) {
+    const d = dis(), q = rectDe(e);
+    e.x = Math.max(0, Math.min(d.ancho - q.w, e.x));
+    e.y = Math.max(0, Math.min(d.alto - q.h, e.y));
+  }
+  $('d-add-h').addEventListener('click', () => nuevoEl('H'));
+  $('d-add-v').addEventListener('click', () => nuevoEl('V'));
+  $('d-ancho').addEventListener('input', e => { dis().ancho = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
+  $('d-alto').addEventListener('input', e => { dis().alto = Math.max(10, parseFloat(e.target.value) || 10); guardar(); pintarCanvas(); });
+  $('d-limpiar').addEventListener('click', () => {
+    if (confirm('¿Borrar todo el diseño?')) { dis().el = []; selId = null; guardar(); pintarTablaDiseno(); pintarCanvas(); }
+  });
+  $('d-pasar').addEventListener('click', () => {
+    const ps = piezasDesdeDiseno(dis().el);
+    if (!ps.length) { alert('Primero agregá tablas al diseño.'); return; }
+    if (estado.piezas.length && !confirm('Esto reemplaza la lista de piezas actual por las del diseño. ¿Continuar?')) return;
+    estado.piezas = ps; guardar(); pintarPiezas();
+    $('tabla-piezas').scrollIntoView({ behavior: 'smooth' });
+  });
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset && t.dataset.d !== undefined) {
+      const el = dis().el[+t.dataset.d], k = t.dataset.k;
+      el[k] = (k === 'nombre' || k === 'orient') ? t.value : parseFloat(t.value) || 0;
+      if (k !== 'nombre') clampEl(el);
+      guardar(); pintarCanvas();
+    }
+  });
+  document.addEventListener('change', e => {
+    if (e.target.dataset && e.target.dataset.d !== undefined) pintarTablaDiseno();
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.deld !== undefined) { dis().el.splice(+b.dataset.deld, 1); guardar(); pintarTablaDiseno(); pintarCanvas(); }
+    if (b.dataset.dup !== undefined) {
+      const o = dis().el[+b.dataset.dup], c = { ...o, id: Date.now() + Math.random(), x: o.x + 3, y: o.y + 3 };
+      clampEl(c); dis().el.push(c); selId = c.id; guardar(); pintarTablaDiseno(); pintarCanvas();
+    }
+  });
+  function ptSvg(ev) {
+    const cv = $('d-canvas'), pt = cv.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    return pt.matrixTransform(cv.getScreenCTM().inverse());
+  }
+  $('d-canvas').addEventListener('pointerdown', ev => {
+    const r0 = ev.target.closest('rect.el');
+    if (!r0) { selId = null; pintarCanvas(); pintarTablaDiseno(); return; }
+    const id = +r0.dataset.id, el = dis().el.find(x => x.id === id);
+    selId = id;
+    const p = ptSvg(ev);
+    arrastre = { el, dx: p.x - el.x, dy: p.y - el.y };
+    $('d-canvas').setPointerCapture(ev.pointerId);
+    pintarCanvas(); pintarTablaDiseno();
+  });
+  $('d-canvas').addEventListener('pointermove', ev => {
+    if (!arrastre) return;
+    const p = ptSvg(ev), e = arrastre.el;
+    e.x = Math.round((p.x - arrastre.dx) * 2) / 2;
+    e.y = Math.round((p.y - arrastre.dy) * 2) / 2;
+    clampEl(e); pintarCanvas();
+  });
+  const finArrastre = () => { if (arrastre) { arrastre = null; guardar(); pintarTablaDiseno(); } };
+  $('d-canvas').addEventListener('pointerup', finArrastre);
+  $('d-canvas').addEventListener('pointercancel', finArrastre);
+
   function iniciar() {
+    $('notas').value = estado.notas || '';
+    $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto;
+    pintarTablaDiseno(); pintarCanvas();
     $('kerf').value = estado.kerf;
     $('rotar').checked = !!estado.rotar;
     $('unir').checked = estado.unir !== false;
@@ -422,4 +555,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { calcularPlan, PLANTILLAS };
+if (typeof module !== 'undefined') module.exports = { calcularPlan, PLANTILLAS, piezasDesdeDiseno };

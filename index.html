@@ -14,6 +14,12 @@
 
 <main>
   <section class="card">
+    <h2>📝 Lo que necesito</h2>
+    <p class="hint">Escribí acá la descripción del mueble, medidas, ideas o pendientes. Se guarda solo y sale en la impresión.</p>
+    <textarea id="notas" rows="4" placeholder="Ej: Librero para la sala, 4 repisas, madera de pino, que quepa en la pared de 1.20 m..."></textarea>
+  </section>
+
+  <section class="card">
     <h2>1. Diseño del mueble</h2>
     <p class="hint">Elegí una plantilla, poné las medidas totales y se generan las piezas. Después podés editarlas o agregar más.</p>
     <div class="row">
@@ -24,6 +30,30 @@
     <div id="plantilla-campos" class="row"></div>
     <button id="btn-generar" class="primary">Generar piezas</button>
     <svg id="vista-mueble" class="vista" viewBox="0 0 300 200"></svg>
+  </section>
+
+  <section class="card">
+    <h2>✏️ Diseñador (vista de frente)</h2>
+    <p class="hint">Dibujá tu mueble con tablas para saber cuántas piezas necesitás. Agregá tablas horizontales o verticales, arrastralas con el dedo o el mouse, o ajustá sus medidas en la lista. Todo en cm.</p>
+    <div class="row">
+      <label>Ancho del mueble<input type="number" id="d-ancho" min="10" step="1"></label>
+      <label>Alto del mueble<input type="number" id="d-alto" min="10" step="1"></label>
+    </div>
+    <div>
+      <button id="d-add-h" class="primary">+ Tabla horizontal</button>
+      <button id="d-add-v" class="primary">+ Tabla vertical</button>
+    </div>
+    <svg id="d-canvas" class="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    <p class="hint">“Profundidad” es el fondo de la tabla (lo que no se ve de frente) y pasa a ser el ancho de la pieza.</p>
+    <div class="table-wrap">
+      <table id="d-tabla">
+        <thead><tr><th>Nombre</th><th>Posición</th><th>Largo</th><th>Espesor</th><th>Profundidad</th><th>Izq.</th><th>Arriba</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="d-resumen" class="hint"></div>
+    <button id="d-pasar" class="primary">Pasar diseño a la lista de piezas ⬇</button>
+    <button id="d-limpiar" class="danger">Borrar diseño</button>
   </section>
 
   <section class="card">
@@ -63,6 +93,7 @@
     <h2>Resultado</h2>
     <div id="resumen"></div>
     <div id="avisos"></div>
+    <div id="notas-print"></div>
     <h3>Lista de cortes</h3>
     <div id="lista-cortes"></div>
     <h3>Esquema de cada tabla</h3>
