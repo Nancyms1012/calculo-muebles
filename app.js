@@ -226,6 +226,29 @@ const PLANTILLAS = {
   },
 };
 
+// Color por tipo de pieza, para identificarlas fácil.
+const COLORES = [
+  ['Techo / superior', /techo|superior|tapa/, '#6aa9e9'],
+  ['Piso / inferior', /piso|inferior|base/, '#a77be0'],
+  ['Costado', /costado|lateral/, '#f09a4a'],
+  ['División', /divisi/, '#ee6f8b'],
+  ['Repisa', /repisa|estante/, '#5fc47f'],
+  ['Tubo para ropa', /tubo/, '#a9b2ba'],
+];
+const COLORES_OTROS = ['#e6c84a', '#4fc3c9', '#c98f6b', '#b5d65a', '#e58fd1', '#8aa0e8'];
+function colorDe(nombre) {
+  const n = String(nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  for (const [, re, c] of COLORES) if (re.test(n)) return c;
+  let h = 0;
+  for (const ch of n.replace(/\s*\(tira.*$/, '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return COLORES_OTROS[h % COLORES_OTROS.length];
+}
+function leyendaHTML(nombres) {
+  const vistos = new Map();
+  for (const n of nombres) { const base = String(n).replace(/\s*\(tira.*$/, ''); if (!vistos.has(base)) vistos.set(base, colorDe(base)); }
+  return '<div class="leyenda">' + [...vistos].map(([n, c]) => `<span><i style="background:${c}"></i>${String(n).replace(/[&<>]/g, '')}</span>`).join('') + '</div>';
+}
+
 function r(n) { return Math.round(n * 100) / 100; }
 
 function dibujoMesa(v) {
@@ -442,15 +465,18 @@ if (typeof document !== 'undefined') {
       }));
       return `<div class="grupo"><b>Espesor ${g.espesor} cm — ${esc(g.stock.nombre)}</b>
       <table class="cortes"><thead><tr><th>Pieza</th><th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
-      ${[...filas.values()].map(f => `<tr><td>${esc(f.nombre)}</td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
+      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
       </tbody></table></div>`;
     }).join('');
 
     const mats = materialesDesdeDiseno(dis().el);
     if (mats.length) $('lista-cortes').innerHTML += `<div class="grupo"><b>Otros materiales (no se cortan de tabla)</b><ul>${mats.map(m => `<li>${m.cant} × ${esc(m.nombre)}: ${num(m.largo)} cm de largo, Ø ${num(m.diametro)} cm</li>`).join('')}</ul></div>`;
+    const nombresRes = [];
+    plan.grupos.forEach(g => g.tablas.forEach(t => t.piezas.forEach(p => nombresRes.push(p.nombre))));
+    $('leyenda-res').innerHTML = leyendaHTML(nombresRes);
     $('esquemas').innerHTML = plan.grupos.map(g => g.tablas.map((t, ti) => {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
-      const rects = t.piezas.map(p => `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="#8fbf7a" stroke="#2f5d1f"/>
+      const rects = t.piezas.map(p => `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="${colorDe(p.nombre)}" stroke="#333" stroke-width="1"/>
         <text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle">${esc(p.nombre)} ${num(p.w)}×${num(p.h)}</text></g>`).join('');
       return `<div class="tabla-sch"><small>Tabla #${ti + 1} · ${esc(g.stock.nombre)} (${W}×${H}×${g.stock.espesor} cm)${t.piezas.some(p => p.rot) ? ' · incluye piezas giradas' : ''}</small>
       <svg viewBox="0 0 800 ${H * sc}">${rects}</svg></div>`;
@@ -479,7 +505,7 @@ if (typeof document !== 'undefined') {
     g += `<text transform="translate(${-pad + fs},${d.alto / 2}) rotate(-90)" font-size="${fs}" text-anchor="middle">${d.alto} cm</text>`;
     d.el.forEach(e => {
       const q = rectDe(e);
-      g += `<rect class="el${e.id === selId ? ' sel' : ''}${e.tubo ? ' tubo' : ''}" ${e.tubo ? `rx="${q.h / 2}"` : ''} data-id="${e.id}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
+      g += `<rect class="el${e.id === selId ? ' sel' : ''}${e.tubo ? ' tubo' : ''}" ${e.tubo ? `rx="${q.h / 2}"` : ''} data-id="${e.id}" style="fill:${colorDe(e.nombre)}" x="${e.x}" y="${e.y}" width="${q.w}" height="${q.h}"/>`;
       if (Math.max(q.w, q.h) > fs * 3) {
         const vert = q.h > q.w;
         g += vert
@@ -491,12 +517,17 @@ if (typeof document !== 'undefined') {
     pintarResumenDiseno();
   }
   function todasLasPiezas() { return piezasDesdeDiseno(dis().el).concat(estado.piezas); }
+  function pintarLeyenda() {
+    const nombres = dis().el.map(e => e.nombre);
+    $('d-leyenda').innerHTML = nombres.length ? leyendaHTML(nombres) : '';
+  }
   function pintarAuto() {
+    pintarLeyenda();
     const ps = piezasDesdeDiseno(dis().el), mats = materialesDesdeDiseno(dis().el);
     const total = ps.reduce((t, p) => t + p.cant, 0);
     $('piezas-auto').innerHTML = ps.length
       ? `<b>Del diseño: ${total} piezas</b><div class="table-wrap"><table class="cortes"><thead><tr><th>Pieza</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th></tr></thead><tbody>${
-        ps.map(p => `<tr><td>${esc(p.nombre)}</td><td>${num(p.largo)}</td><td>${num(p.ancho)}</td><td>${num(p.espesor)}</td><td><b>${p.cant}</b></td></tr>`).join('')
+        ps.map(p => `<tr><td><i class="sw" style="background:${colorDe(p.nombre)}"></i>${esc(p.nombre)}</td><td>${num(p.largo)}</td><td>${num(p.ancho)}</td><td>${num(p.espesor)}</td><td><b>${p.cant}</b></td></tr>`).join('')
       }</tbody></table></div>` + (mats.length ? `<p class="hint">Aparte (no es madera): ${mats.map(m => `${m.cant} × ${esc(m.nombre)} de ${num(m.largo)} cm`).join(', ')}</p>` : '')
       : '<p class="hint">Todavía no hay piezas: agregá techo, piso, costados, repisas, etc. en el Diseñador (arriba) y aparecerán aquí solas.</p>';
   }
@@ -627,4 +658,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

@@ -57,3 +57,8 @@ textarea{width:100%;padding:8px;border:1px solid #c9b9a6;border-radius:6px;font-
 .canvas rect.el.tubo{fill:#9aa3ab;stroke:#4a525a}
 .canvas rect.el.tubo.sel{fill:#c0c8d0;stroke:#c33}
 #d-botones{margin-bottom:6px}
+.leyenda{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.85rem;margin:6px 0}
+.leyenda span{display:inline-flex;align-items:center;gap:5px}
+.leyenda i,i.sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid #0004;vertical-align:middle}
+i.sw{margin-right:6px}
+.tabla-sch svg{background:#f3ece1}
