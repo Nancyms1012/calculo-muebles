@@ -55,7 +55,8 @@
     </div>
     <div id="d-resumen" class="hint"></div>
     <button id="d-pasar" class="primary">Pasar diseño a la lista de piezas ⬇</button>
-    <button id="d-limpiar" class="danger">Borrar diseño</button>
+    <button id="d-borrar-sel" class="danger">🗑 Borrar tabla seleccionada</button>
+    <button id="d-limpiar" class="danger">Borrar todo el diseño</button>
   </section>
 
   <section class="card">
@@ -63,11 +64,12 @@
     <p class="hint">Todas las medidas en centímetros (cm). “Largo” es la medida a lo largo de la veta.</p>
     <div class="table-wrap">
       <table id="tabla-piezas">
-        <thead><tr><th>Nombre</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th><th></th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="p-todas" title="Seleccionar todas"></th><th>Nombre</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
     <button id="btn-add-pieza">+ Agregar pieza</button>
+    <button id="btn-borrar-sel" class="danger">🗑 Borrar seleccionadas</button>
     <button id="btn-limpiar-piezas" class="danger">Borrar todas</button>
   </section>
 

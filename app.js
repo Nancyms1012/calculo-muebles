@@ -311,13 +311,15 @@ if (typeof document !== 'undefined') {
   }
 
   function pintarPiezas() {
+    $('p-todas').checked = false;
     $('tabla-piezas').tBodies[0].innerHTML = estado.piezas.map((p, i) => `<tr>
+      <td><input type="checkbox" data-selp="${i}"></td>
       <td><input data-t="piezas" data-i="${i}" data-k="nombre" value="${esc(p.nombre)}"></td>
       <td><input type="number" step="0.1" min="0" data-t="piezas" data-i="${i}" data-k="largo" value="${p.largo}"></td>
       <td><input type="number" step="0.1" min="0" data-t="piezas" data-i="${i}" data-k="ancho" value="${p.ancho}"></td>
       <td><input type="number" step="0.1" min="0" data-t="piezas" data-i="${i}" data-k="espesor" value="${p.espesor}"></td>
       <td><input type="number" step="1" min="1" data-t="piezas" data-i="${i}" data-k="cant" value="${p.cant}"></td>
-      <td><button data-del="piezas" data-i="${i}" title="Eliminar">✖</button></td></tr>`).join('');
+      <td><button class="danger" data-del="piezas" data-i="${i}" title="Eliminar esta pieza">🗑</button></td></tr>`).join('');
   }
   function pintarStock() {
     $('tabla-stock').tBodies[0].innerHTML = estado.stock.map((p, i) => `<tr>
@@ -326,7 +328,7 @@ if (typeof document !== 'undefined') {
       <td><input type="number" step="0.1" min="0" data-t="stock" data-i="${i}" data-k="ancho" value="${p.ancho}"></td>
       <td><input type="number" step="0.1" min="0" data-t="stock" data-i="${i}" data-k="espesor" value="${p.espesor}"></td>
       <td><input type="number" step="1" min="0" data-t="stock" data-i="${i}" data-k="precio" value="${p.precio || 0}"></td>
-      <td><button data-del="stock" data-i="${i}" title="Eliminar">✖</button></td></tr>`).join('');
+      <td><button class="danger" data-del="stock" data-i="${i}" title="Eliminar esta tabla">🗑</button></td></tr>`).join('');
   }
 
   document.addEventListener('input', e => {
@@ -354,6 +356,15 @@ if (typeof document !== 'undefined') {
   });
   $('btn-add-pieza').addEventListener('click', () => {
     estado.piezas.push({ nombre: 'Pieza', largo: 50, ancho: 10, espesor: 2.5, cant: 1 }); guardar(); pintarPiezas();
+  });
+  $('p-todas').addEventListener('change', e => {
+    document.querySelectorAll('[data-selp]').forEach(c => c.checked = e.target.checked);
+  });
+  $('btn-borrar-sel').addEventListener('click', () => {
+    const idx = [...document.querySelectorAll('[data-selp]')].filter(c => c.checked).map(c => +c.dataset.selp);
+    if (!idx.length) { alert('Marcá primero las piezas que querés borrar (casilla a la izquierda).'); return; }
+    if (!confirm(`¿Borrar ${idx.length} pieza(s)?`)) return;
+    estado.piezas = estado.piezas.filter((_, i) => !idx.includes(i)); guardar(); pintarPiezas();
   });
   $('btn-limpiar-piezas').addEventListener('click', () => {
     if (confirm('¿Borrar todas las piezas?')) { estado.piezas = []; guardar(); pintarPiezas(); }
@@ -468,7 +479,7 @@ if (typeof document !== 'undefined') {
       <td><input data-d="${i}" data-k="nombre" value="${esc(e.nombre)}"></td>
       <td><select data-d="${i}" data-k="orient"><option value="H"${e.orient === 'H' ? ' selected' : ''}>Horizontal</option><option value="V"${e.orient === 'V' ? ' selected' : ''}>Vertical</option></select></td>
       ${['largo', 'esp', 'prof', 'x', 'y'].map(k => `<td><input type="number" step="0.5" min="0" data-d="${i}" data-k="${k}" value="${e[k]}"></td>`).join('')}
-      <td><button data-dup="${i}" title="Duplicar">⧉</button><button data-deld="${i}" title="Eliminar">✖</button></td></tr>`).join('');
+      <td><button data-dup="${i}" title="Duplicar">⧉</button><button class="danger" data-deld="${i}" title="Eliminar esta tabla">🗑</button></td></tr>`).join('');
   }
   function nuevoEl(orient) {
     const d = dis(), n = d.el.length;
@@ -490,6 +501,15 @@ if (typeof document !== 'undefined') {
   $('d-aplicar-prof').addEventListener('click', () => {
     dis().el.forEach(x => x.prof = dis().prof); guardar(); pintarTablaDiseno(); pintarCanvas();
   });
+  function borrarSelDiseno() {
+    const d = dis(), i = d.el.findIndex(x => x.id === selId);
+    if (i < 0) { alert('Tocá primero una tabla en el dibujo (o en la lista) para seleccionarla.'); return; }
+    d.el.splice(i, 1); selId = null; guardar(); pintarTablaDiseno(); pintarCanvas();
+  }
+  $('d-borrar-sel').addEventListener('click', borrarSelDiseno);
+  document.addEventListener('keydown', ev => {
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && selId && !/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) borrarSelDiseno();
+  });
   $('d-limpiar').addEventListener('click', () => {
     if (confirm('¿Borrar todo el diseño?')) { dis().el = []; selId = null; guardar(); pintarTablaDiseno(); pintarCanvas(); }
   });
@@ -507,6 +527,13 @@ if (typeof document !== 'undefined') {
       el[k] = (k === 'nombre' || k === 'orient') ? t.value : parseFloat(t.value) || 0;
       if (k !== 'nombre') clampEl(el);
       guardar(); pintarCanvas();
+    }
+  });
+  document.addEventListener('focusin', e => {
+    const t = e.target;
+    if (t.dataset && t.dataset.d !== undefined) {
+      const el = dis().el[+t.dataset.d];
+      if (el && el.id !== selId) { selId = el.id; pintarCanvas(); }
     }
   });
   document.addEventListener('change', e => {
