@@ -228,7 +228,7 @@ const PLANTILLAS = {
 
 // Color por tipo de pieza, para identificarlas fácil.
 const COLORES = [
-  ['Techo / superior', /techo|superior|tapa/, '#6aa9e9'],
+  ['Techo / superior', /techo|superior|tapa/, '#6699FF'],
   ['Piso / inferior', /piso|inferior|base/, '#a77be0'],
   ['Costado', /costado|lateral/, '#f09a4a'],
   ['División', /divisi/, '#ee6f8b'],
