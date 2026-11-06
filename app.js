@@ -232,7 +232,7 @@ const COLORES = [
   ['Piso / inferior', /piso|inferior|base/, '#a77be0'],
   ['Costado', /costado|lateral/, '#f09a4a'],
   ['División', /divisi/, '#ee6f8b'],
-  ['Repisa', /repisa|estante/, '#5fc47f'],
+  ['Repisa', /repisa|estante/, '#66FFFF'],
   ['Tubo para ropa', /tubo/, '#a9b2ba'],
 ];
 const COLORES_OTROS = ['#e6c84a', '#4fc3c9', '#c98f6b', '#b5d65a', '#e58fd1', '#8aa0e8'];
