@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de Cortes para Muebles</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>🪵 Calculadora de Cortes para Muebles</h1>
+  <p>Diseñá tu mueble, indicá las tablas que venden y la app calcula cuántas comprar y cómo cortarlas.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Diseño del mueble</h2>
+    <p class="hint">Elegí una plantilla, poné las medidas totales y se generan las piezas. Después podés editarlas o agregar más.</p>
+    <div class="row">
+      <label>Plantilla
+        <select id="plantilla"></select>
+      </label>
+    </div>
+    <div id="plantilla-campos" class="row"></div>
+    <button id="btn-generar" class="primary">Generar piezas</button>
+    <svg id="vista-mueble" class="vista" viewBox="0 0 300 200"></svg>
+  </section>
+
+  <section class="card">
+    <h2>2. Piezas a cortar</h2>
+    <p class="hint">Todas las medidas en centímetros (cm). “Largo” es la medida a lo largo de la veta.</p>
+    <div class="table-wrap">
+      <table id="tabla-piezas">
+        <thead><tr><th>Nombre</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button id="btn-add-pieza">+ Agregar pieza</button>
+    <button id="btn-limpiar-piezas" class="danger">Borrar todas</button>
+  </section>
+
+  <section class="card">
+    <h2>3. Tablas que venden</h2>
+    <p class="hint">Medidas totales de cada tabla en la tienda. El precio es opcional (si lo ponés, se elige la opción más barata).</p>
+    <div class="table-wrap">
+      <table id="tabla-stock">
+        <thead><tr><th>Nombre</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Precio (₡)</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button id="btn-add-stock">+ Agregar tabla</button>
+    <div class="row opciones">
+      <label>Grosor del corte (sierra), cm
+        <input type="number" id="kerf" step="0.1" min="0" value="0.3">
+      </label>
+      <label class="check"><input type="checkbox" id="rotar"> Permitir girar piezas (ignorar dirección de la veta)</label>
+      <label class="check"><input type="checkbox" id="unir" checked> Unir tablas (encolar tiras) si la pieza es más ancha que la tabla</label>
+    </div>
+    <button id="btn-calcular" class="primary big">Calcular</button>
+  </section>
+
+  <section class="card" id="resultado" hidden>
+    <h2>Resultado</h2>
+    <div id="resumen"></div>
+    <div id="avisos"></div>
+    <h3>Lista de cortes</h3>
+    <div id="lista-cortes"></div>
+    <h3>Esquema de cada tabla</h3>
+    <div id="esquemas"></div>
+    <button id="btn-imprimir">🖨️ Imprimir / PDF</button>
+  </section>
+
+  <section class="card no-print">
+    <h2>Respaldo</h2>
+    <button id="btn-export">📤 Exportar proyecto</button>
+    <button id="btn-import">📥 Importar proyecto</button>
+    <input type="file" id="file-import" accept="application/json" hidden>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

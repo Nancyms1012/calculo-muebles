@@ -1,0 +1,47 @@
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f4efe8;color:#2b2118}
+header{background:#6b4423;color:#fff;padding:18px 16px;text-align:center}
+header h1{margin:0 0 4px;font-size:1.5rem}
+header p{margin:0;opacity:.9;font-size:.95rem}
+main{max-width:900px;margin:16px auto;padding:0 12px;display:grid;gap:16px}
+.card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+h2{margin:0 0 6px;color:#6b4423}
+h3{margin:18px 0 8px}
+.hint{color:#6d5f52;font-size:.88rem;margin:0 0 10px}
+.row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:.85rem;gap:3px}
+label.check{flex-direction:row;align-items:center;gap:6px}
+input,select{padding:7px;border:1px solid #c9b9a6;border-radius:6px;font-size:1rem;width:100%;min-width:0}
+input[type=checkbox]{width:auto}
+.row label input,.row label select{width:130px}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;margin-bottom:10px}
+th,td{padding:4px;text-align:left;font-size:.9rem}
+th{font-size:.8rem;color:#6d5f52}
+td input{width:100%;min-width:62px}
+td:first-child input{min-width:120px}
+button{padding:8px 14px;border:1px solid #6b4423;background:#fff;color:#6b4423;border-radius:6px;cursor:pointer;font-size:.95rem;margin-right:6px;margin-top:4px}
+button:hover{background:#f1e6d8}
+button.primary{background:#6b4423;color:#fff}
+button.primary:hover{background:#573619}
+button.big{font-size:1.1rem;padding:12px 24px;margin-top:12px}
+button.danger{border-color:#a33;color:#a33}
+.vista{width:100%;max-width:360px;height:auto;display:block;margin-top:12px;background:#faf6f0;border:1px solid #e3d6c5;border-radius:8px}
+.kpis{display:flex;flex-wrap:wrap;gap:10px}
+.kpi{flex:1 1 140px;background:#f7efe4;border-radius:8px;padding:10px;text-align:center}
+.kpi b{display:block;font-size:1.7rem;color:#6b4423}
+.kpi span{font-size:.8rem;color:#6d5f52}
+.grupo{border-top:2px solid #e3d6c5;margin-top:16px;padding-top:8px}
+.aviso{background:#fdecea;border-left:4px solid #c33;padding:8px;margin:8px 0;border-radius:4px}
+.tabla-sch{margin:10px 0}
+.tabla-sch svg{width:100%;height:auto;border:1px solid #c9b9a6;background:#e9d3b0}
+.tabla-sch small{color:#6d5f52}
+.cortes td,.cortes th{border-bottom:1px solid #eee}
+@media print{
+  header p,.no-print,button,.hint{display:none}
+  body{background:#fff}
+  .card{box-shadow:none;break-inside:avoid}
+  #resultado{display:block}
+  .card:not(#resultado){display:none}
+}
+.aviso.nota{background:#eaf3fb;border-color:#3a7bc8}
