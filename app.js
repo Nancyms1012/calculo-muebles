@@ -242,6 +242,12 @@ const PLANTILLAS = {
     ],
     dibujo: v => dibujoCaja(v, v.repisas, true),
   },
+  tabla: {
+    nombre: 'Tabla suelta (estante, tapa, etc.)',
+    campos: [['largo', 'Largo', 100], ['ancho', 'Ancho (fondo)', 30], ['esp', 'Espesor', 1.8], ['cant', 'Cantidad', 1]],
+    piezas: v => [{ nombre: 'Tabla / Estante', largo: v.largo, ancho: v.ancho, espesor: v.esp, cant: Math.max(1, Math.round(v.cant) || 1) }],
+    dibujo: v => dibujoTabla(v),
+  },
   otro: {
     nombre: 'Otro (digitar mis propias piezas)',
     campos: [],
@@ -286,6 +292,16 @@ function dibujoMesa(v) {
   <rect x="${x0}" y="${y0 + et}" width="${ep}" height="${h - et}" fill="#b07d45" stroke="#6b4423"/>
   <rect x="${x0 + w - ep}" y="${y0 + et}" width="${ep}" height="${h - et}" fill="#b07d45" stroke="#6b4423"/>
   <text x="${W / 2}" y="${y0 + h + 14}" text-anchor="middle" font-size="11">${v.largo} × ${v.alto} cm (fondo ${v.ancho})</text>`;
+}
+
+function dibujoTabla(v) {
+  const W = 300, Hh = 200, pad = 30;
+  const esc = Math.min((W - 2 * pad) / Math.max(v.largo, 1), (Hh - 2 * pad) / Math.max(v.ancho, 1));
+  const w = v.largo * esc, h = v.ancho * esc, x0 = (W - w) / 2, y0 = (Hh - h) / 2 - 8;
+  return `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="#66FFFF" stroke="#333"/>
+  <text x="${W / 2}" y="${y0 + h / 2}" text-anchor="middle" dominant-baseline="middle" font-size="12">${v.largo} × ${v.ancho} × ${v.esp} cm${(v.cant || 1) > 1 ? ' (x' + v.cant + ')' : ''}</text>
+  <text x="${W / 2}" y="${y0 + h + 16}" text-anchor="middle" font-size="11">largo ${v.largo} cm</text>
+  <text transform="translate(${x0 - 8},${y0 + h / 2}) rotate(-90)" text-anchor="middle" font-size="11">ancho ${v.ancho} cm</text>`;
 }
 
 function dibujoCaja(v, repisas, puertas) {
