@@ -571,9 +571,35 @@ function revisarDiseno(d) {
     piezas.forEach(p => invol.add(p.n));
   };
 
+  // 0) Techo, piso y costados deben ir pegados al borde del mueble (si no, todo lo demás se mide mal)
+  const norm = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const borde = [];
+  pl.hs.forEach(h => {
+    const nn = norm(h.nombre);
+    if (/piso|inferior/.test(nn)) {
+      const gap = Hh - h.y2;
+      if (gap > E && gap <= 5) borde.push({ e: h, texto: `${nom(h)} no está pegado al borde de abajo del mueble: queda un hueco de ${fN(gap)} cm bajo esta pieza. Debe ir pegado abajo (su cara superior a ${fN(h.h)} cm del piso).`, fix: { id: h.id, y: r(Hh - h.h) } });
+    } else if (/techo|superior/.test(nn)) {
+      if (h.y > E && h.y <= 5) borde.push({ e: h, texto: `${nom(h)} no está pegado al borde de arriba del mueble: queda un hueco de ${fN(h.y)} cm sobre esta pieza. Debe ir pegado arriba.`, fix: { id: h.id, y: 0 } });
+    }
+  });
+  pl.vs.forEach(v => {
+    if (!/costado|lateral/.test(norm(v.nombre))) return;
+    const izq = v.x < A / 2, gap = izq ? v.x : A - v.x2;
+    if (gap > E && gap <= 5) borde.push({ e: v, texto: `${nom(v)} no está pegado al borde ${izq ? 'izquierdo' : 'derecho'} del mueble: queda un hueco de ${fN(gap)} cm. Debe ir pegado a ese lado.`, fix: izq ? { id: v.id, x: 0 } : { id: v.id, x: r(A - v.w) } });
+  });
+  if (borde.length) {
+    borde.forEach(b => add('error', 'borde', b.texto, [b.e], b.fix));
+    probs.push({ nivel: 'aviso', tipo: 'orden', texto: 'Corregí primero lo anterior y volvé a revisar: las demás medidas (divisiones, repisas) se comparan contra el techo, el piso y los costados, así que el resultado puede cambiar.', piezas: [] });
+    return { pl, problemas: probs, notas, okPiezas: pl.el.filter(x => !invol.has(x.n)) };
+  }
+
   // 1) Superposiciones
-  pl.choques.forEach(c => add('error', 'choque',
-    `${nom(c.a)} y ${nom(c.b)} se montan ${fN(c.ox)} × ${fN(c.oy)} cm. ${c.sugerencia}`, [c.a, c.b], fixExtremo(c)));
+  pl.choques.forEach(c => {
+    const fx = fixExtremo(c), vv = c.a.orient === 'V' ? c.a : c.b;
+    if (fx && fx.id === vv.id) return; // la vertical entra en la horizontal por el medio: se explica en la revisión de la vertical (paso 4)
+    add('error', 'choque', `${nom(c.a)} y ${nom(c.b)} se montan ${fN(c.ox)} × ${fN(c.oy)} cm. ${c.sugerencia}`, [c.a, c.b], fx);
+  });
 
   // 2) Piezas fuera del mueble
   pl.el.forEach(e => {
@@ -625,26 +651,34 @@ function revisarDiseno(d) {
     }
   });
 
-  // 4) Verticales: ¿llegan de tabla a tabla?
+  // 4) Verticales: ¿llegan de tabla a tabla? (y ¿están bien ubicadas?)
   pl.vs.forEach(v => {
     if (malPos.has(v.n)) return;
     let T = null, B = null;
     pl.hs.forEach(h => {
-      const ov = Math.min(h.x2, v.x2) - Math.max(h.x, v.x);
-      if (ov <= E) return;
-      if (h.y2 <= v.y + E && (!T || h.y2 > T.y2)) T = h;
-      if (h.y >= v.y2 - E && (!B || h.y < B.y)) B = h;
+      if (Math.min(h.x2, v.x2) - Math.max(h.x, v.x) <= E) return;
+      const dentro = v.x > h.x + E && v.x2 < h.x2 - E; // la vertical está en medio de la horizontal (no en su extremo)
+      const sobre = h.y2 <= v.y + E || (dentro && v.y >= h.y - E && v.y < h.y2 - E && v.y2 > h.y2 + E);
+      const bajo = h.y >= v.y2 - E || (dentro && v.y2 <= h.y2 + E && v.y2 > h.y + E && v.y < h.y - E);
+      if (sobre && (!T || h.y2 > T.y2)) T = h;
+      if (bajo && (!B || h.y < B.y)) B = h;
     });
     const tb = T ? T.y2 : 0, bb = B ? B.y : Hh;
     const gt = v.y - tb, gb = bb - v.y2;
-    if (gt > E || gb > E) {
+    if (Math.abs(gt) > E || Math.abs(gb) > E) {
       const nuevo = r(bb - tb);
       const tn = T ? nom(T) : 'el borde superior del mueble', bn = B ? nom(B) : 'el piso (borde inferior del mueble)';
-      const hueco = gt > E && gb > E ? `Queda un hueco de ${fN(gt)} cm arriba y ${fN(gb)} cm abajo.`
-        : gt > E ? `Queda un hueco de ${fN(gt)} cm arriba.` : `Queda un hueco de ${fN(gb)} cm abajo.`;
-      add(T || B ? 'error' : 'aviso', 'hueco',
-        `${nom(v)} mide ${fN(v.h)} cm de alto, pero el espacio entre ${tn} y ${bn} mide ${fN(nuevo)} cm. ${hueco} Para que calce debe medir ${fN(nuevo)} cm.`,
-        [v], T || B ? { id: v.id, y: tb, largo: nuevo } : null);
+      const desc = [];
+      if (gt > E) desc.push(`queda un hueco de ${fN(gt)} cm arriba`); else if (gt < -E) desc.push(`se mete ${fN(-gt)} cm dentro de ${tn}`);
+      if (gb > E) desc.push(`queda un hueco de ${fN(gb)} cm abajo`); else if (gb < -E) desc.push(`se mete ${fN(-gb)} cm dentro de ${bn}`);
+      const nivel = T || B ? 'error' : 'aviso';
+      if (Math.abs(v.h - nuevo) <= E) {
+        add(nivel, 'ubicacion', `${nom(v)} tiene la medida correcta (${fN(v.h)} cm, justo el espacio entre ${tn} y ${bn}), pero está mal ubicada: ${desc.join(' y ')}. Colocala a ${fN(tb)} cm desde arriba.`, [v], { id: v.id, y: tb });
+      } else {
+        const txt = desc.join(' y '), cap = txt.charAt(0).toUpperCase() + txt.slice(1);
+        add(nivel, 'hueco', `${nom(v)} mide ${fN(v.h)} cm de alto, pero el espacio entre ${tn} y ${bn} mide ${fN(nuevo)} cm. ${cap}. Para que calce debe medir ${fN(nuevo)} cm${Math.abs(v.y - tb) > E ? ` y empezar a ${fN(tb)} cm desde arriba` : ''}.`,
+          [v], T || B ? { id: v.id, y: tb, largo: nuevo } : null);
+      }
     }
   });
 
@@ -666,12 +700,6 @@ function revisarDiseno(d) {
     const partes = [...porFondo].map(([k, l]) => `${fN(k)} cm (${l.map(x => x.n).join(', ')})`).join(' · ');
     add('aviso', 'fondo', `Las piezas no tienen el mismo fondo: ${partes}. Si todo el mueble tiene un solo fondo, usá “Aplicar profundidad a TODAS las tablas”.`, []);
   }
-  const espDis = r(d.esp);
-  const raros = duras.filter(e => Math.abs(e.esp - espDis) > E);
-  if (raros.length) {
-    add('aviso', 'espesor', `Hay piezas con espesor distinto al del mueble (${fN(espDis)} cm): ${raros.map(e => `${nom(e)} = ${fN(e.esp)} cm`).join(', ')}. Los largos de las demás deben calcularse con el espesor real.`, raros);
-  }
-
   const okPiezas = pl.el.filter(e => !invol.has(e.n));
   return { pl, problemas: probs, notas, okPiezas };
 }
@@ -1232,7 +1260,12 @@ if (typeof document !== 'undefined') {
     const t = e.target;
     if (t.dataset && t.dataset.d !== undefined) {
       const el = dis().el[+t.dataset.d], k = t.dataset.k;
+      const dd = dis(), q0 = rectDe(el);
+      const pegAbajo = k === 'esp' && !el.tubo && el.orient !== 'V' && Math.abs(el.y + q0.h - dd.alto) <= 0.05;
+      const pegDer = k === 'esp' && !el.tubo && el.orient === 'V' && Math.abs(el.x + q0.w - dd.ancho) <= 0.05;
       el[k] = (k === 'nombre' || k === 'orient') ? t.value : parseFloat(t.value) || 0;
+      if (pegAbajo) el.y = r(dd.alto - el.esp);   // el piso sigue pegado abajo aunque cambie su grosor
+      if (pegDer) el.x = r(dd.ancho - el.esp);    // el costado derecho sigue pegado a su lado
       if (k !== 'nombre') clampEl(el);
       guardar(); pintarCanvas();
     }
