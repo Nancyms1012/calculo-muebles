@@ -411,6 +411,13 @@ function sugerirArreglo(c) {
   const nom = e => `${e.n}. ${e.nombre}`;
   if (h && v && h !== v) {
     if (v.x > h.x + 0.05 && v.x2 < h.x2 - 0.05) {
+      const arriba = v.y < h.y - 0.05, abajo = v.y2 > h.y2 + 0.05;
+      if (arriba && !abajo) { // la vertical viene de arriba y entra en la horizontal: debe quedar apoyada encima
+        return `${nom(v)} se mete ${fN(r(v.y2 - h.y))} cm dentro de ${nom(h)}. Para dejarla montada sobre ${nom(h)}, acortala a ${fN(r(h.y - v.y))} cm de alto (que termine justo donde empieza ${nom(h)}). Otra opción: cortar ${nom(h)} en dos piezas.`;
+      }
+      if (abajo && !arriba) { // la vertical viene de abajo y entra en la horizontal: queda pegada debajo
+        return `${nom(v)} se mete ${fN(r(h.y2 - v.y))} cm dentro de ${nom(h)}. Para dejarla pegada debajo de ${nom(h)}, acortala a ${fN(r(v.y2 - h.y2))} cm de alto (que empiece justo donde termina ${nom(h)}). Otra opción: cortar ${nom(h)} en dos piezas.`;
+      }
       const izq = r(v.x - h.x), der = r(h.x2 - v.x2);
       return `La pieza ${nom(h)} atraviesa a ${nom(v)}. Cortala en DOS piezas: una de ${fN(izq)} cm (a la izquierda) y otra de ${fN(der)} cm (a la derecha), o quitá una de las dos.`;
     }
@@ -432,7 +439,12 @@ function fixExtremo(c) {
   const h = a.orient !== 'V' ? a : (b.orient !== 'V' ? b : null);
   const v = a.orient === 'V' ? a : (b.orient === 'V' ? b : null);
   if (!h || !v || h === v) return null;
-  if (v.x > h.x + E && v.x2 < h.x2 - E) return null; // la atraviesa por el medio: hay que partirla
+  if (v.x > h.x + E && v.x2 < h.x2 - E) {
+    const arriba = v.y < h.y - E, abajo = v.y2 > h.y2 + E;
+    if (arriba && !abajo) { const largo = r(h.y - v.y); return largo > 0 ? { id: v.id, largo } : null; }          // queda montada sobre h
+    if (abajo && !arriba) { const largo = r(v.y2 - h.y2); return largo > 0 ? { id: v.id, y: h.y2, largo } : null; } // queda pegada debajo de h
+    return null; // la atraviesa por completo: hay que partir la horizontal
+  }
   if (v.x <= h.x + E) {
     const largo = r(h.x2 - v.x2);
     return largo > 0 ? { id: h.id, x: v.x2, largo } : null;
