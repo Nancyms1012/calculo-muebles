@@ -78,3 +78,5 @@ button:disabled{opacity:.4;cursor:not-allowed}
 body.print-plano .card:not(#plano-sec){display:none!important}
 body.print-plano #plano-sec{display:block!important}
 body.print-plano .plano-mueble{break-after:page;page-break-after:always}
+.malo{color:#e00000;font-weight:bold;font-size:.8rem}
+.aviso button{font-size:.8rem;padding:4px 8px}

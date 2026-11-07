@@ -372,6 +372,9 @@ function calcularPlano(d) {
     if (ox > 0.05 && oy > 0.05) choques.push({ a, b, ox: r(ox), oy: r(oy) });
   }
 
+  const idsChoque = new Set();
+  choques.forEach(c => { idsChoque.add(c.a.n); idsChoque.add(c.b.n); });
+
   const filas = orden.map(e => {
     let medidas, pos;
     if (e.tubo) {
@@ -385,9 +388,33 @@ function calcularPlano(d) {
       medidas = `${fN(e.largo)} × ${fN(e.prof)} × ${fN(e.esp)}`;
       pos = `Cara superior a ${fN(Hh - e.y)} cm del piso (cara inferior a ${fN(Hh - e.y2)} cm). Desde la izquierda: ${fN(e.x)} cm (hasta ${fN(e.x2)} cm; ${fN(A - e.x2)} cm del lado derecho).`;
     }
-    return { n: e.n, nombre: e.nombre, medidas, pos, tubo: !!e.tubo };
+    return { n: e.n, nombre: e.nombre, medidas, pos, tubo: !!e.tubo, choque: idsChoque.has(e.n) };
   });
-  return { A, Hh, prof: +d.prof, el: orden, hs, vs, ts, luces, anchosLibres, choques, filas };
+  choques.forEach(c => { c.sugerencia = sugerirArreglo(c); });
+  return { A, Hh, prof: +d.prof, el: orden, hs, vs, ts, luces, anchosLibres, choques, filas, idsChoque };
+}
+
+// Qué hacer para que dos piezas superpuestas calcen.
+function sugerirArreglo(c) {
+  const a = c.a, b = c.b;
+  const h = a.orient !== 'V' ? a : (b.orient !== 'V' ? b : null);
+  const v = a.orient === 'V' ? a : (b.orient === 'V' ? b : null);
+  const nom = e => `${e.n}. ${e.nombre}`;
+  if (h && v && h !== v) {
+    if (v.x > h.x + 0.05 && v.x2 < h.x2 - 0.05) {
+      const izq = r(v.x - h.x), der = r(h.x2 - v.x2);
+      return `La pieza ${nom(h)} atraviesa a ${nom(v)}. Cortala en DOS piezas: una de ${fN(izq)} cm (a la izquierda) y otra de ${fN(der)} cm (a la derecha), o quitá una de las dos.`;
+    }
+    if (v.x <= h.x + 0.05) {
+      return `La pieza ${nom(v)} choca con el extremo de ${nom(h)}. Acortá ${nom(h)} a ${fN(r(h.x2 - v.x2))} cm y empezala a ${fN(v.x2)} cm desde la izquierda.`;
+    }
+    return `La pieza ${nom(v)} choca con el extremo de ${nom(h)}. Acortá ${nom(h)} a ${fN(r(v.x - h.x))} cm.`;
+  }
+  if (h && !v) {
+    const alto = Math.min(a.y2, b.y2) - Math.max(a.y, b.y);
+    return `${nom(a)} y ${nom(b)} están en el mismo lugar (se montan ${fN(r(alto))} cm de alto). Mové una más arriba o más abajo, o borrá la que sobre.`;
+  }
+  return `${nom(a)} y ${nom(b)} se montan. Separalas o acortá una de las dos.`;
 }
 
 // Dibujo SVG autónomo (estilos en línea, para poder exportarlo a PNG).
@@ -437,13 +464,21 @@ function svgPlano(pl, colorFn, titulo) {
   // piezas
   el.forEach(e => {
     const px = X(e.x), py = Y(e.y), pw = e.w * s, ph = e.h * s;
-    g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" ${e.tubo ? `rx="${Math.min(pw, ph) / 2}"` : ''} fill="${colorFn(e.nombre)}" stroke="#222" stroke-width="1"/>`;
+    const mal = pl.idsChoque && pl.idsChoque.has(e.n);
+    g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" ${e.tubo ? `rx="${Math.min(pw, ph) / 2}"` : ''} fill="${colorFn(e.nombre)}" stroke="${mal ? '#e00000' : '#222'}" stroke-width="${mal ? 3 : 1}"/>`;
     const vert = ph > pw, largoPx = Math.max(pw, ph);
     const full = `${e.n}. ${e.nombre}`;
     const txt = full.length * 5.6 <= largoPx - 6 ? full : String(e.n);
     const attrs = `font-size="10" font-weight="bold" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="2.5" paint-order="stroke" ${F}`;
     const cx = px + pw / 2, cy = py + ph / 2;
     g += vert ? `<text transform="translate(${cx},${cy}) rotate(-90)" ${attrs}>${escH(txt)}</text>` : `<text x="${cx}" y="${cy}" ${attrs}>${escH(txt)}</text>`;
+  });
+
+  // zonas donde las piezas se superponen
+  (pl.choques || []).forEach(c => {
+    const x1 = Math.max(c.a.x, c.b.x), x2 = Math.min(c.a.x2, c.b.x2), y1 = Math.max(c.a.y, c.b.y), y2 = Math.min(c.a.y2, c.b.y2);
+    const cx = X((x1 + x2) / 2), cy = Y((y1 + y2) / 2), rr = Math.max(7, Math.max((x2 - x1) * s, (y2 - y1) * s) / 2 + 4);
+    g += `<circle cx="${cx}" cy="${cy}" r="${rr}" fill="none" stroke="#e00000" stroke-width="2"/><text x="${cx + rr + 3}" y="${cy - rr}" font-size="16" font-weight="bold" fill="#e00000" ${F}>!</text>`;
   });
 
   // espacios libres verticales (derecha)
@@ -969,7 +1004,10 @@ if (typeof document !== 'undefined') {
       const pl = calcularPlano(d);
       const tit = `${mu.nombre} — ${fN(pl.A)} × ${fN(pl.Hh)} × ${fN(pl.prof)} cm (ancho × alto × fondo)`;
       const nom = e => `“${esc(e.nombre)}” (${e.n})`;
-      const avisos = pl.choques.map(c => `<div class="aviso">⚠ ${nom(c.a)} y ${nom(c.b)} se superponen ${fN(c.ox)} × ${fN(c.oy)} cm: así no van a calzar. Una de las dos debe acortarse o moverse. Recordá: el techo, el piso y las repisas van <b>entre</b> los costados y las divisiones (largo = espacio libre). Si una repisa cruza una división, hacela en <b>dos piezas</b> (una a cada lado).</div>`).join('');
+      const resumenMal = pl.choques.length
+        ? `<div class="aviso"><b>⚠ ${pl.idsChoque.size} piezas tienen problema (marcadas en rojo en el dibujo):</b> ${pl.filas.filter(f => f.choque).map(f => `<b>${f.n}.</b> ${esc(f.nombre)}`).join(' · ')}</div>` : '';
+      const avisos = resumenMal + pl.choques.map(c => `<div class="aviso">⚠ ${nom(c.a)} y ${nom(c.b)} se superponen ${fN(c.ox)} × ${fN(c.oy)} cm.<br><b>Qué hacer:</b> ${esc(c.sugerencia)}<br>
+        <span class="no-print"><button data-ir="${c.a.id}" data-mi="${i}">Ver “${esc(c.a.nombre)}” (${c.a.n}) en el diseñador</button> <button data-ir="${c.b.id}" data-mi="${i}">Ver “${esc(c.b.nombre)}” (${c.b.n}) en el diseñador</button></span></div>`).join('');
       const libres = pl.luces.map(l => `<li>Entre ${nom(l.de)} y ${nom(l.a)}: <b>${fN(l.luz)} cm</b> de alto libre</li>`)
         .concat(pl.anchosLibres.map(l => `<li>Entre ${nom(l.de)} y ${nom(l.a)}: <b>${fN(l.luz)} cm</b> de ancho libre</li>`)).join('');
       return `<div class="plano-mueble">
@@ -979,7 +1017,7 @@ if (typeof document !== 'undefined') {
         <div class="no-print"><button data-pl="png" data-mi="${i}">⬇ Descargar imagen (PNG)</button></div>
         ${libres ? `<p><b>Espacios libres:</b></p><ul>${libres}</ul>` : ''}
         <div class="table-wrap"><table class="cortes"><thead><tr><th>#</th><th>Pieza</th><th>Medidas (largo × fondo × espesor, cm)</th><th>Dónde va</th></tr></thead><tbody>
-        ${pl.filas.map(f => `<tr><td><b>${f.n}</b></td><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td><td>${esc(f.medidas)}</td><td>${esc(f.pos)}</td></tr>`).join('')}
+        ${pl.filas.map(f => `<tr><td><b>${f.n}</b></td><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}${f.choque ? ' <span class="malo">⚠ revisar</span>' : ''}</td><td>${esc(f.medidas)}</td><td>${esc(f.pos)}</td></tr>`).join('')}
         </tbody></table></div>
         <p class="hint">Cómo usarlo: marcá en el piso o en el costado la altura indicada y apoyá la tabla de modo que su cara superior quede en esa marca. Los números del dibujo coinciden con la tabla.</p>
       </div>`;
@@ -1013,6 +1051,14 @@ if (typeof document !== 'undefined') {
   }
   $('btn-plano').addEventListener('click', generarPlano);
   $('plano-out').addEventListener('click', ev => {
+    const ir = ev.target.closest('button[data-ir]');
+    if (ir) {
+      const id = Number(ir.dataset.ir);
+      irAMueble(+ir.dataset.mi);
+      selId = id; pintarTablaDiseno(); pintarCanvas();
+      $('d-leyenda').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const b = ev.target.closest('button[data-pl]'); if (!b) return;
     if (b.dataset.pl === 'png') descargarPng(+b.dataset.mi); else imprimirPlano();
   });
