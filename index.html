@@ -178,6 +178,22 @@
       <label>Cuadrícula (cm)<select id="hab-grid"><option value="0">Sin cuadrícula</option><option value="1">1</option><option value="5" selected>5</option><option value="10">10</option></select></label>
       <label class="check"><input type="checkbox" id="hab-dist" checked> Mostrar distancias a las paredes</label>
     </div>
+    <div id="hab-dims-nota" class="hint"></div>
+    <details id="hab-paredes-det" class="paredes-det">
+      <summary>📏 Medir pared por pared (para cuartos con esquinas que entran, que no son un rectángulo perfecto)</summary>
+      <p class="hint">Recorré el cuarto <b>en el sentido de las agujas del reloj</b>, empezando por la pared de arriba hacia la derecha. Escribí el largo de cada pared y, al final de ella, hacia dónde gira la esquina: <b>↻ derecha</b> en una esquina normal y <b>↺ izquierda</b> en una esquina que entra hacia adentro (como en una “L”). Las paredes tienen que cerrar el contorno: si no cierran, abajo te dice cuánto falta.</p>
+      <div class="table-wrap">
+        <table id="hab-paredes">
+          <thead><tr><th>#</th><th>Va</th><th>Largo (cm)</th><th>Esquina al final</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button id="hab-w-add">+ Agregar pared al final</button>
+      <button id="hab-w-cerrar">⟲ Cerrar automáticamente (ajusta la última)</button>
+      <button id="hab-w-L">Probar forma en “L”</button>
+      <button id="hab-w-rect">Volver a rectángulo</button>
+      <div id="hab-paredes-estado" class="hint"></div>
+    </details>
     <div id="hab-resumen" class="hint"></div>
   </section>
 
@@ -193,8 +209,24 @@
       <label>Fondo (cm)<input id="hab-c-h" type="number" min="1" value="50"></label>
       <button id="hab-add-custom" class="primary">+ Agregar con mis medidas</button>
     </div>
+    <h3>🚪 Puerta (siempre sobre una pared)</h3>
+    <div class="row">
+      <label>En la pared<select id="hab-p-pared"></select></label>
+      <label>A cuántos cm del inicio de esa pared<input id="hab-p-pos" type="number" min="0" placeholder="centrada"></label>
+      <label>Ancho (cm)<input id="hab-p-w" type="number" min="30" value="80"></label>
+      <label>Bisagra<select id="hab-p-bis"><option value="ini">al inicio de la pared</option><option value="fin">al final de la pared</option></select></label>
+      <label>Abre<select id="hab-p-lado"><option value="adentro">hacia adentro</option><option value="afuera">hacia afuera</option></select></label>
+      <button id="hab-add-puerta" class="primary">🚪 Agregar puerta</button>
+    </div>
+    <p class="hint">El “inicio” de cada pared es su esquina de salida en el recorrido de las agujas del reloj (la flecha del número en el plano te indica hacia dónde va). En el plano la puerta abre un hueco en la pared y dibuja su giro; si arrastrás la puerta, se desliza por las paredes.</p>
+    <h3>🧱 División / pared interna</h3>
+    <div class="row">
+      <label>Largo (cm)<input id="hab-t-l" type="number" min="1" value="150"></label>
+      <label>Grosor (cm)<input id="hab-t-g" type="number" min="1" value="10"></label>
+      <button id="hab-add-tabique" class="primary">🧱 Agregar división</button>
+    </div>
+    <p class="hint">Es una pared que queda adentro del cuarto (por ejemplo, la que separa una parte de la habitación). Se arrastra, se gira y se edita como un mueble; los muebles no pueden montarse sobre ella.</p>
     <div>
-      <button id="hab-add-puerta">🚪 Puerta</button>
       <button id="hab-add-ventana">🪟 Ventana</button>
       <button id="hab-add-alfombra">▭ Alfombra</button>
       <button id="hab-sync-madera">🪵 Traer mis muebles de madera</button>
@@ -217,6 +249,14 @@
       <button data-act="cv">↕ Centrar vert.</button>
       <button data-act="dup">⧉ Duplicar</button>
       <button data-act="del" class="danger">🗑 Borrar</button>
+    </div>
+    <div id="hab-puerta-ed" class="row no-print" hidden>
+      <b>Puerta seleccionada:</b>
+      <label>Pared<select id="hab-pe-pared"></select></label>
+      <label>Desde el inicio (cm)<input id="hab-pe-pos" type="number" min="0"></label>
+      <label>Ancho (cm)<input id="hab-pe-w" type="number" min="30"></label>
+      <label>Bisagra<select id="hab-pe-bis"><option value="ini">al inicio de la pared</option><option value="fin">al final de la pared</option></select></label>
+      <label>Abre<select id="hab-pe-lado"><option value="adentro">hacia adentro</option><option value="afuera">hacia afuera</option></select></label>
     </div>
     <svg id="hab-canvas" class="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="hab-rev"></div>

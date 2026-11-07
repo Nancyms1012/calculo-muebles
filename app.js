@@ -718,35 +718,154 @@ const PRESETS_HAB = [
 
 function nuevaHab(n) { return { nombre: 'Habitación ' + n, ancho: 400, largo: 300, items: [] }; }
 
+// ---- Forma de la habitación: paredes en ángulos de 90°, recorridas en sentido horario ----
+// paredes = [{len, giro:'D'|'I'}]  — se empieza arriba a la izquierda yendo a la derecha;
+// "giro" es hacia dónde dobla la esquina al final de la pared (D = derecha, esquina normal; I = izquierda, esquina entrante).
+const DIRS_HAB = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+const NOMBRE_DIR = ['→ hacia la derecha', '↓ hacia abajo', '← hacia la izquierda', '↑ hacia arriba'];
+const FLECHA_DIR = ['→', '↓', '←', '↑'];
+function paredesRect(W, H) { return [{ len: W, giro: 'D' }, { len: H, giro: 'D' }, { len: W, giro: 'D' }, { len: H, giro: 'D' }]; }
+function anguloDir(dx, dy) { return ((Math.round(Math.atan2(dy, dx) * 180 / Math.PI) % 360) + 360) % 360; }
+function esRectangular(hb) {
+  const p = hb.paredes;
+  return !p || (p.length === 4 && p.every(q => q.giro !== 'I') && Math.abs(p[0].len - p[2].len) < 0.01 && Math.abs(p[1].len - p[3].len) < 0.01);
+}
+
+function geomHab(hb) {
+  const pr = hb.paredes && hb.paredes.length >= 3 ? hb.paredes : paredesRect(hb.ancho, hb.largo);
+  let x = 0, y = 0, dir = 0;
+  const raw = [{ x, y }], ws = [];
+  pr.forEach((p, i) => {
+    const d = DIRS_HAB[dir], len = Math.max(0, +p.len || 0);
+    const a = { x, y }; x += d[0] * len; y += d[1] * len;
+    ws.push({ i, a, b: { x, y }, dx: d[0], dy: d[1], len, nx: -d[1], ny: d[0], dir });
+    raw.push({ x, y });
+    dir = (dir + (p.giro === 'I' ? 3 : 1)) % 4;
+  });
+  const cierra = Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && dir === 0;
+  const minX = Math.min(...raw.map(p => p.x)), minY = Math.min(...raw.map(p => p.y));
+  const maxX = Math.max(...raw.map(p => p.x)), maxY = Math.max(...raw.map(p => p.y));
+  const sh = p => ({ x: r(p.x - minX), y: r(p.y - minY) });
+  const walls = ws.map(w => Object.assign({}, w, { a: sh(w.a), b: sh(w.b) }));
+  const pts = raw.slice(0, cierra ? raw.length - 1 : raw.length).map(sh);
+  let a2 = 0; pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length]; a2 += p.x * q.y - q.x * p.y; });
+  return { pts, walls, cierra, dirFinal: dir, falta: { x: r(-x), y: r(-y) }, w: r(maxX - minX), h: r(maxY - minY), sx: minX, sy: minY, area: Math.abs(a2) / 2 / 10000, horario: a2 > 0 };
+}
+function puntoEnPoligono(pts, px, py) {
+  let dentro = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a.y > py) !== (b.y > py) && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) dentro = !dentro;
+  }
+  return dentro;
+}
+// ¿El rectángulo q cabe completo dentro de la forma de la habitación? (tolerancia e cm)
+function rectDentro(g, q, e) {
+  e = e === undefined ? 0.5 : e;
+  if (g.pts.length < 3) return true;
+  const xs = [q.x + e, q.x2 - e], ys = [q.y + e, q.y2 - e];
+  for (const px of xs) for (const py of ys) if (!puntoEnPoligono(g.pts, px, py)) return false;
+  for (const w of g.walls) {
+    if (w.dx === 0) { // pared vertical
+      const c = w.a.x, y1 = Math.min(w.a.y, w.b.y), y2 = Math.max(w.a.y, w.b.y);
+      if (c > q.x + e && c < q.x2 - e && Math.min(y2, q.y2 - e) - Math.max(y1, q.y + e) > 0.01) return false;
+    } else {
+      const c = w.a.y, x1 = Math.min(w.a.x, w.b.x), x2 = Math.max(w.a.x, w.b.x);
+      if (c > q.y + e && c < q.y2 - e && Math.min(x2, q.x2 - e) - Math.max(x1, q.x + e) > 0.01) return false;
+    }
+  }
+  return true;
+}
+// Distancia desde el rectángulo q hasta la pared más cercana en cada dirección (null si no hay).
+function distParedes(g, q) {
+  const cx = (q.x + q.x2) / 2, cy = (q.y + q.y2) / 2;
+  const d = { L: Infinity, R: Infinity, T: Infinity, B: Infinity };
+  g.walls.forEach(w => {
+    if (w.dx === 0) {
+      const c = w.a.x, y1 = Math.min(w.a.y, w.b.y), y2 = Math.max(w.a.y, w.b.y);
+      if (cy >= y1 && cy <= y2) { if (c <= q.x + 0.5) d.L = Math.min(d.L, q.x - c); if (c >= q.x2 - 0.5) d.R = Math.min(d.R, c - q.x2); }
+    } else {
+      const c = w.a.y, x1 = Math.min(w.a.x, w.b.x), x2 = Math.max(w.a.x, w.b.x);
+      if (cx >= x1 && cx <= x2) { if (c <= q.y + 0.5) d.T = Math.min(d.T, q.y - c); if (c >= q.y2 - 0.5) d.B = Math.min(d.B, c - q.y2); }
+    }
+  });
+  Object.keys(d).forEach(k => { d[k] = isFinite(d[k]) ? r(Math.max(0, d[k])) : null; });
+  return d;
+}
+// Coloca una puerta sobre una pared. it = {pared, pos, w, bisagra:'ini'|'fin', afuera}. Calcula x, y, rot, flip y los extremos de la abertura.
+function ubicarPuerta(g, it) {
+  const w = g.walls[Math.max(0, Math.min(it.pared | 0, g.walls.length - 1))];
+  if (!w) return;
+  it.pared = w.i;
+  const wd = Math.max(1, +it.w || 80);
+  it.w = wd; it.h = wd;
+  it.pos = r(Math.max(0, Math.min(Math.max(0, w.len - wd), +it.pos || 0)));
+  const sg = it.afuera ? -1 : 1, nx = w.nx * sg, ny = w.ny * sg;
+  const S = { x: w.a.x + w.dx * it.pos, y: w.a.y + w.dy * it.pos };
+  const E2 = { x: S.x + w.dx * wd, y: S.y + w.dy * wd };
+  const xs = [S.x, E2.x, E2.x + nx * wd, S.x + nx * wd], ys = [S.y, E2.y, E2.y + ny * wd, S.y + ny * wd];
+  it.x = r(Math.min(...xs)); it.y = r(Math.min(...ys));
+  it.ax = S.x; it.ay = S.y; it.bx = E2.x; it.by = E2.y;
+  const ini = it.bisagra !== 'fin';
+  const ux = ini ? w.dx : -w.dx, uy = ini ? w.dy : -w.dy;
+  const det = ux * ny - uy * nx;
+  if (det > 0) { it.rot = anguloDir(ux, uy); it.flip = false; } else { it.rot = anguloDir(-ux, -uy); it.flip = true; }
+}
+// Largo que debería tener la última pared para cerrar el contorno.
+function cerrarParedes(p) {
+  if (!p || p.length < 4) return { ok: false, msg: 'Hacen falta al menos 4 paredes.' };
+  let x = 0, y = 0, dir = 0;
+  for (let i = 0; i < p.length - 1; i++) {
+    const d = DIRS_HAB[dir]; x += d[0] * (+p[i].len || 0); y += d[1] * (+p[i].len || 0);
+    dir = (dir + (p[i].giro === 'I' ? 3 : 1)) % 4;
+  }
+  const d = DIRS_HAB[dir], horiz = d[0] !== 0;
+  const desalinea = horiz ? y : x, largo = horiz ? -x * d[0] : -y * d[1];
+  if (Math.abs(desalinea) > 0.5) return { ok: false, msg: `La última pared va ${horiz ? 'en horizontal' : 'en vertical'}, pero las anteriores terminan ${fN(Math.abs(desalinea))} cm ${horiz ? 'más arriba o más abajo' : 'más a la izquierda o a la derecha'} del punto de partida. El error está en otra pared: revisá que las paredes opuestas midan lo mismo.` };
+  if (largo <= 0.5) return { ok: false, msg: 'Con esas medidas la última pared no puede cerrar el contorno: revisá los giros de las esquinas o las medidas anteriores.' };
+  return { ok: true, len: r(largo) };
+}
+
 // Rectángulo que ocupa un elemento ya girado (rot en pasos de 90°). x,y = esquina superior izquierda.
 function rectHab(it) {
   const sw = (it.rot || 0) % 180 !== 0;
   const w = sw ? it.h : it.w, h = sw ? it.w : it.h;
   return { x: it.x, y: it.y, w, h, x2: it.x + w, y2: it.y + h };
 }
+const ES_OBSTACULO = t => t === 'mueble' || t === 'tabique';
 
 function revisarHabitacion(hb) {
   const E = 0.5, probs = [], ids = new Set();
+  const g = geomHab(hb);
   const nm = it => `“${it.nombre}”`;
   const add = (nivel, texto, items) => { probs.push({ nivel, texto, ids: items.map(i => i.id) }); items.forEach(i => ids.add(i.id)); };
   const ov = (a, b) => ({ ox: Math.min(a.x2, b.x2) - Math.max(a.x, b.x), oy: Math.min(a.y2, b.y2) - Math.max(a.y, b.y) });
   const its = hb.items;
+  if (!g.cierra) {
+    add('error', g.dirFinal !== 0
+      ? 'Las paredes no cierran la habitación: los giros de las esquinas no vuelven al punto de partida (revisá cuáles esquinas son entrantes ↺).'
+      : `Las paredes no cierran la habitación: faltan ${fN(Math.abs(g.falta.x))} cm en horizontal y ${fN(Math.abs(g.falta.y))} cm en vertical. Revisá que las paredes opuestas midan lo mismo.`, []);
+  } else if (!g.horario) {
+    add('error', 'Las paredes están dibujadas en sentido contrario: recorré el cuarto en el sentido de las agujas del reloj.', []);
+  }
   its.forEach(it => {
+    if (it.tipo === 'puerta') return;
     const q = rectHab(it), f = [];
     if (q.x < -E) f.push(`${fN(-q.x)} cm por la izquierda`);
-    if (q.x2 > hb.ancho + E) f.push(`${fN(q.x2 - hb.ancho)} cm por la derecha`);
+    if (q.x2 > g.w + E) f.push(`${fN(q.x2 - g.w)} cm por la derecha`);
     if (q.y < -E) f.push(`${fN(-q.y)} cm por arriba`);
-    if (q.y2 > hb.largo + E) f.push(`${fN(q.y2 - hb.largo)} cm por abajo`);
+    if (q.y2 > g.h + E) f.push(`${fN(q.y2 - g.h)} cm por abajo`);
     if (f.length) add('error', `${nm(it)} se sale de la habitación (${f.join(', ')}).`, [it]);
+    else if (g.cierra && !rectDentro(g, q, E)) add('error', `${nm(it)} choca con una pared o queda fuera de la forma de la habitación.`, [it]);
   });
-  const muebles = its.filter(i => i.tipo === 'mueble'), puertas = its.filter(i => i.tipo === 'puerta');
-  for (let i = 0; i < muebles.length; i++) for (let j = i + 1; j < muebles.length; j++) {
-    const { ox, oy } = ov(rectHab(muebles[i]), rectHab(muebles[j]));
-    if (ox > E && oy > E) add('error', `${nm(muebles[i])} y ${nm(muebles[j])} se montan ${fN(ox)} × ${fN(oy)} cm.`, [muebles[i], muebles[j]]);
+  const obst = its.filter(i => ES_OBSTACULO(i.tipo)), puertas = its.filter(i => i.tipo === 'puerta' && !i.afuera);
+  for (let i = 0; i < obst.length; i++) for (let j = i + 1; j < obst.length; j++) {
+    const { ox, oy } = ov(rectHab(obst[i]), rectHab(obst[j]));
+    if (ox > E && oy > E) add('error', `${nm(obst[i])} y ${nm(obst[j])} se montan ${fN(ox)} × ${fN(oy)} cm.`, [obst[i], obst[j]]);
   }
   puertas.forEach(p => {
     const rp = rectHab(p);
-    muebles.forEach(m => {
+    obst.forEach(m => {
       const { ox, oy } = ov(rp, rectHab(m));
       if (ox > E && oy > E) add('aviso', `${nm(m)} estorba el giro de la puerta ${nm(p)}: la puerta no podrá abrir completa (se montan ${fN(ox)} × ${fN(oy)} cm).`, [m, p]);
     });
@@ -755,27 +874,30 @@ function revisarHabitacion(hb) {
     const { ox, oy } = ov(rectHab(puertas[i]), rectHab(puertas[j]));
     if (ox > E && oy > E) add('aviso', `El giro de ${nm(puertas[i])} y de ${nm(puertas[j])} se cruzan.`, [puertas[i], puertas[j]]);
   }
-  const areaHab = hb.ancho * hb.largo / 10000;
+  const muebles = its.filter(i => i.tipo === 'mueble');
   const areaMuebles = muebles.reduce((t, m) => t + m.w * m.h, 0) / 10000;
-  return { problemas: probs, ids, areaHab, areaMuebles, pct: areaHab > 0 ? 100 * areaMuebles / areaHab : 0 };
+  return { problemas: probs, ids, areaHab: g.area, areaMuebles, pct: g.area > 0 ? 100 * areaMuebles / g.area : 0 };
 }
 
-// Primer lugar libre (recorriendo de 10 en 10 cm) donde cabe el elemento sin montarse en otros.
+// Primer lugar libre (recorriendo de 10 en 10 cm) donde cabe el elemento sin montarse en otros ni salirse.
 function posicionLibre(hb, it) {
+  const g = geomHab(hb);
   const b = rectHab(Object.assign({}, it, { x: 0, y: 0 }));
-  const ocup = hb.items.filter(o => o.tipo === 'mueble' || o.tipo === 'puerta').map(rectHab);
-  for (let y = 0; y <= hb.largo - b.h + 0.01; y += 10) for (let x = 0; x <= hb.ancho - b.w + 0.01; x += 10) {
-    const libre = ocup.every(o => !(Math.min(x + b.w, o.x2) - Math.max(x, o.x) > 0.5 && Math.min(y + b.h, o.y2) - Math.max(y, o.y) > 0.5));
-    if (libre) return { x, y };
+  const ocup = hb.items.filter(o => ES_OBSTACULO(o.tipo) || (o.tipo === 'puerta' && !o.afuera)).map(rectHab);
+  for (let y = 0; y <= g.h - b.h + 0.01; y += 10) for (let x = 0; x <= g.w - b.w + 0.01; x += 10) {
+    const q = { x, y, x2: x + b.w, y2: y + b.h };
+    if (g.cierra && !rectDentro(g, q, 0.5)) continue;
+    if (ocup.every(o => !(Math.min(q.x2, o.x2) - Math.max(q.x, o.x) > 0.5 && Math.min(q.y2, o.y2) - Math.max(q.y, o.y) > 0.5))) return { x, y };
   }
   return { x: 0, y: 0 };
 }
 
-// Al arrastrar: se pega a paredes, centro y bordes de otros muebles (si está cerca) o a la cuadrícula.
+// Al arrastrar: se pega a paredes, esquinas, centro y bordes de otros muebles (si está cerca) o a la cuadrícula.
 function snapMove(it, x, y, hb, o) {
   const op = Object.assign({ snap: true, grid: 5, thr: 4 }, o || {});
+  const g = geomHab(hb);
   const b = rectHab(Object.assign({}, it, { x: 0, y: 0 }));
-  const otros = hb.items.filter(q => q.id !== it.id && (q.tipo === 'mueble' || q.tipo === 'puerta')).map(rectHab);
+  const otros = hb.items.filter(q => q.id !== it.id && (ES_OBSTACULO(q.tipo) || (q.tipo === 'puerta' && !q.afuera))).map(rectHab);
   const guias = [];
   const elegir = (val, cands, grid) => {
     let mejor = null;
@@ -783,8 +905,9 @@ function snapMove(it, x, y, hb, o) {
     if (mejor) return { v: mejor.c.v, g: mejor.c.g };
     return { v: grid > 0 && op.snap ? Math.round(val / grid) * grid : val, g: null };
   };
-  const cx = [{ v: 0, g: 0 }, { v: hb.ancho - b.w, g: hb.ancho }, { v: (hb.ancho - b.w) / 2, g: hb.ancho / 2 }];
-  const cy = [{ v: 0, g: 0 }, { v: hb.largo - b.h, g: hb.largo }, { v: (hb.largo - b.h) / 2, g: hb.largo / 2 }];
+  const cx = [{ v: 0, g: 0 }, { v: g.w - b.w, g: g.w }, { v: (g.w - b.w) / 2, g: g.w / 2 }];
+  const cy = [{ v: 0, g: 0 }, { v: g.h - b.h, g: g.h }, { v: (g.h - b.h) / 2, g: g.h / 2 }];
+  g.pts.forEach(p => { cx.push({ v: p.x, g: p.x }, { v: p.x - b.w, g: p.x }); cy.push({ v: p.y, g: p.y }, { v: p.y - b.h, g: p.y }); });
   otros.forEach(q => {
     cx.push({ v: q.x2, g: q.x2 }, { v: q.x - b.w, g: q.x }, { v: q.x, g: q.x }, { v: q.x2 - b.w, g: q.x2 }, { v: q.x + q.w / 2 - b.w / 2, g: q.x + q.w / 2 });
     cy.push({ v: q.y2, g: q.y2 }, { v: q.y - b.h, g: q.y }, { v: q.y, g: q.y }, { v: q.y2 - b.h, g: q.y2 }, { v: q.y + q.h / 2 - b.h / 2, g: q.y + q.h / 2 });
@@ -793,8 +916,8 @@ function snapMove(it, x, y, hb, o) {
   if (sx.g !== null) guias.push({ eje: 'x', pos: sx.g });
   if (sy.g !== null) guias.push({ eje: 'y', pos: sy.g });
   return {
-    x: r(Math.max(0, Math.min(hb.ancho - b.w, sx.v))),
-    y: r(Math.max(0, Math.min(hb.largo - b.h, sy.v))),
+    x: r(Math.max(0, Math.min(g.w - b.w, sx.v))),
+    y: r(Math.max(0, Math.min(g.h - b.h, sy.v))),
     guias,
   };
 }
@@ -843,6 +966,12 @@ if (typeof document !== 'undefined') {
       if (!(hb.largo > 0)) hb.largo = 300;
       if (!Array.isArray(hb.items)) hb.items = [];
       hb.items.forEach(it => { if (!it.tipo) it.tipo = 'mueble'; if (!it.rot) it.rot = 0; });
+      const g0 = geomHab(hb);
+      if (hb.paredes) { hb.ancho = g0.w; hb.largo = g0.h; }
+      hb.items.filter(it => it.tipo === 'puerta').forEach(p => {
+        if (p.pared === undefined) { p.pared = 0; p.pos = Math.max(0, Math.min(g0.walls[0].len - p.w, p.x || 0)); p.bisagra = 'ini'; p.afuera = false; }
+        ubicarPuerta(g0, p);
+      });
     });
     if (!(s.habActiva >= 0 && s.habActiva < s.habs.length)) s.habActiva = 0;
     if (!(s.activo >= 0 && s.activo < s.muebles.length)) s.activo = 0;
@@ -1476,7 +1605,8 @@ if (typeof document !== 'undefined') {
   let habSel = null, habDrag = null, habGuias = [], habRv = null;
   const hab = () => estado.habs[estado.habActiva];
   const habIt = id => hab().items.find(i => i.id === id);
-  const TIPO_TXT = { mueble: 'Mueble', alfombra: 'Alfombra', puerta: 'Puerta', ventana: 'Ventana' };
+  const geo = () => geomHab(hab());
+  const TIPO_TXT = { mueble: 'Mueble', alfombra: 'Alfombra', puerta: 'Puerta', ventana: 'Ventana', tabique: 'División' };
 
   function mostrarVista(v) {
     vistaActual = v;
@@ -1490,9 +1620,9 @@ if (typeof document !== 'undefined') {
 
   function opcionesHab() { return { snap: $('hab-snap').checked, grid: +$('hab-grid').value, thr: 4 }; }
   function clampHab(it) {
-    const hb = hab(), q = rectHab(it);
-    it.x = r(Math.max(0, Math.min(hb.ancho - q.w, it.x)));
-    it.y = r(Math.max(0, Math.min(hb.largo - q.h, it.y)));
+    const g = geo(), q = rectHab(it);
+    it.x = r(Math.max(0, Math.min(g.w - q.w, it.x)));
+    it.y = r(Math.max(0, Math.min(g.h - q.h, it.y)));
   }
   // Gira alrededor del centro, para que el mueble no "salte".
   function fijarRot(it, rot) {
@@ -1502,13 +1632,29 @@ if (typeof document !== 'undefined') {
     it.x = cx - n.w / 2; it.y = cy - n.h / 2;
     clampHab(it);
   }
+  // Después de tocar las paredes: ajusta el tamaño de la caja, mueve lo que haga falta y recoloca las puertas.
+  function aplicarParedes(hb) {
+    const g = geomHab(hb);
+    const dx = (hb.sx || 0) - g.sx, dy = (hb.sy || 0) - g.sy;
+    if (dx || dy) hb.items.forEach(it => { if (it.tipo !== 'puerta') { it.x = r(it.x + dx); it.y = r(it.y + dy); } });
+    hb.sx = g.sx; hb.sy = g.sy;
+    if (hb.paredes) { hb.ancho = g.w; hb.largo = g.h; }
+    hb.items.filter(it => it.tipo === 'puerta').forEach(p => ubicarPuerta(g, p));
+    return g;
+  }
 
   /* ---- pestañas de habitaciones ---- */
   function pintarHabTabs() {
     $('hab-tabs').innerHTML = estado.habs.map((h, i) => `<button class="tab${i === estado.habActiva ? ' act' : ''}" data-hi="${i}">${esc(h.nombre)}</button>`).join('');
     $('hab-nombre').value = hab().nombre;
     $('hab-del').disabled = estado.habs.length < 2;
-    $('hab-ancho').value = hab().ancho; $('hab-largo').value = hab().largo;
+    pintarHabDims();
+  }
+  function pintarHabDims() {
+    const hb = hab(), rect = esRectangular(hb);
+    $('hab-ancho').value = hb.ancho; $('hab-largo').value = hb.largo;
+    $('hab-ancho').readOnly = !rect; $('hab-largo').readOnly = !rect;
+    $('hab-dims-nota').textContent = rect ? '' : 'La forma está definida pared por pared (abajo). Estas medidas son las de la caja que contiene al cuarto.';
   }
   function irAHab(i) { estado.habActiva = i; habSel = null; guardar(); pintarHab(); }
   $('hab-tabs').addEventListener('click', ev => { const b = ev.target.closest('button[data-hi]'); if (b) irAHab(+b.dataset.hi); });
@@ -1526,18 +1672,73 @@ if (typeof document !== 'undefined') {
     irAHab(Math.min(estado.habActiva, estado.habs.length - 1));
   });
   ['hab-ancho', 'hab-largo'].forEach(id => $(id).addEventListener('input', () => {
-    hab().ancho = Math.max(50, parseFloat($('hab-ancho').value) || 50);
-    hab().largo = Math.max(50, parseFloat($('hab-largo').value) || 50);
-    guardar(); pintarHabCanvas(); pintarHabMedidas();
+    const hb = hab(); if (!esRectangular(hb)) return;
+    hb.ancho = Math.max(50, parseFloat($('hab-ancho').value) || 50);
+    hb.largo = Math.max(50, parseFloat($('hab-largo').value) || 50);
+    if (hb.paredes) hb.paredes = paredesRect(hb.ancho, hb.largo);
+    aplicarParedes(hb); guardar(); pintarHabParedes(); pintarHabPuertaForm(); pintarHabCanvas(); pintarHabMedidas(); pintarHabTabla();
   }));
   ['hab-snap', 'hab-grid', 'hab-dist'].forEach(id => $(id).addEventListener('change', pintarHabCanvas));
+
+  /* ---- paredes, una por una ---- */
+  function pintarHabParedes() {
+    const hb = hab(), g = geo(), pr = hb.paredes || paredesRect(hb.ancho, hb.largo);
+    $('hab-paredes').tBodies[0].innerHTML = g.walls.map((w, i) => `<tr>
+      <td><b>${i + 1}</b></td><td>${NOMBRE_DIR[w.dir]}</td>
+      <td><input type="number" min="1" step="1" data-wi="${i}" data-k="len" value="${pr[i].len}"></td>
+      <td><select data-wi="${i}" data-k="giro"><option value="D"${pr[i].giro !== 'I' ? ' selected' : ''}>↻ Derecha (esquina normal)</option><option value="I"${pr[i].giro === 'I' ? ' selected' : ''}>↺ Izquierda (esquina que entra)</option></select></td>
+      <td><button data-wins="${i}" title="Agregar una pared después de ésta">＋</button><button class="danger" data-wdel="${i}" title="Quitar esta pared">🗑</button></td></tr>`).join('');
+    let est;
+    if (!g.cierra) est = g.dirFinal !== 0
+      ? '⚠ Los giros de las esquinas no vuelven al punto de partida: revisá cuáles esquinas son ↺ (las que entran hacia adentro).'
+      : `⚠ Las paredes no cierran: faltan ${fN(Math.abs(g.falta.x))} cm en horizontal y ${fN(Math.abs(g.falta.y))} cm en vertical. Revisá que las paredes opuestas midan lo mismo, o tocá “Cerrar automáticamente”.`;
+    else if (!g.horario) est = '⚠ Las paredes van en sentido contrario: recorré el cuarto en el sentido de las agujas del reloj.';
+    else est = `✔ Las paredes cierran. Área: ${fN(g.area)} m² · caja que contiene al cuarto: ${fN(g.w)} × ${fN(g.h)} cm.`;
+    $('hab-paredes-estado').textContent = est;
+    $('hab-paredes-estado').className = 'hint ' + (g.cierra && g.horario ? 'ok-txt' : 'mal-txt');
+  }
+  function tocoParedes() { aplicarParedes(hab()); guardar(); pintarHabDims(); pintarHabPuertaForm(); refrescarHab(); }
+  $('hab-paredes').addEventListener('input', ev => {
+    const t = ev.target; if (t.dataset.wi === undefined) return;
+    const hb = hab(); if (!hb.paredes) hb.paredes = paredesRect(hb.ancho, hb.largo);
+    const p = hb.paredes[+t.dataset.wi];
+    if (t.dataset.k === 'len') p.len = Math.max(1, parseFloat(t.value) || 1); else p.giro = t.value;
+    aplicarParedes(hb); guardar(); pintarHabDims(); pintarHabPuertaForm();
+    const g = geo(); pintarHabEstadoParedes(); pintarHabCanvas(); pintarHabMedidas(); pintarHabTabla();
+  });
+  function pintarHabEstadoParedes() { const keep = document.activeElement; pintarHabParedes(); if (keep && keep.dataset && keep.dataset.wi !== undefined) { const n = document.querySelector(`#hab-paredes [data-wi="${keep.dataset.wi}"][data-k="${keep.dataset.k}"]`); if (n) { n.focus(); } } }
+  $('hab-paredes').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const hb = hab(); if (!hb.paredes) hb.paredes = paredesRect(hb.ancho, hb.largo);
+    if (b.dataset.wins !== undefined) hb.paredes.splice(+b.dataset.wins + 1, 0, { len: 100, giro: 'D' });
+    else if (b.dataset.wdel !== undefined) { if (hb.paredes.length <= 4) { alert('Un cuarto necesita al menos 4 paredes.'); return; } hb.paredes.splice(+b.dataset.wdel, 1); }
+    else return;
+    tocoParedes(); pintarHabParedes();
+  });
+  $('hab-w-add').addEventListener('click', () => { const hb = hab(); if (!hb.paredes) hb.paredes = paredesRect(hb.ancho, hb.largo); hb.paredes.push({ len: 100, giro: 'D' }); tocoParedes(); pintarHabParedes(); });
+  $('hab-w-cerrar').addEventListener('click', () => {
+    const hb = hab(); if (!hb.paredes) hb.paredes = paredesRect(hb.ancho, hb.largo);
+    const c = cerrarParedes(hb.paredes);
+    if (!c.ok) { alert(c.msg); return; }
+    hb.paredes[hb.paredes.length - 1].len = c.len; tocoParedes(); pintarHabParedes();
+  });
+  $('hab-w-L').addEventListener('click', () => {
+    const hb = hab(), g = geo(), W = g.w, H = g.h, nw = r(W * 0.4), nh = r(H * 0.4);
+    if (hb.items.length && !confirm('Se cambia la forma del cuarto a una “L” de ejemplo (después podés ajustar cada pared). ¿Continuar?')) return;
+    hb.paredes = [{ len: r(W - nw), giro: 'D' }, { len: nh, giro: 'I' }, { len: nw, giro: 'D' }, { len: r(H - nh), giro: 'D' }, { len: W, giro: 'D' }, { len: H, giro: 'D' }];
+    tocoParedes(); pintarHabParedes();
+  });
+  $('hab-w-rect').addEventListener('click', () => {
+    const hb = hab(), g = geo();
+    if (hb.paredes && !esRectangular(hb) && !confirm('Se vuelve a un rectángulo con la caja actual. ¿Continuar?')) return;
+    hb.paredes = paredesRect(g.w, g.h); tocoParedes(); pintarHabParedes();
+  });
 
   /* ---- agregar elementos ---- */
   $('hab-preset').innerHTML = PRESETS_HAB.map((p, i) => `<option value="${i}">${p[0]} (${p[1]} × ${p[2]})</option>`).join('');
   function agregarItemHab(base) {
     const hb = hab();
     const it = Object.assign({ id: Date.now() + Math.random(), nombre: 'Mueble', tipo: 'mueble', w: 100, h: 50, x: 0, y: 0, rot: 0, color: '#d9b585' }, base);
-    if (it.tipo === 'puerta') it.h = it.w;
     const p = posicionLibre(hb, it); it.x = p.x; it.y = p.y;
     hb.items.push(it); habSel = it.id; guardar(); refrescarHab();
     return it;
@@ -1549,9 +1750,13 @@ if (typeof document !== 'undefined') {
     agregarItemHab({ nombre: $('hab-c-nombre').value.trim() || 'Mueble', w, h });
     $('hab-c-nombre').value = '';
   });
-  $('hab-add-puerta').addEventListener('click', () => agregarItemHab({ nombre: 'Puerta', tipo: 'puerta', w: 80, h: 80, color: '#fff4cc' }));
   $('hab-add-ventana').addEventListener('click', () => agregarItemHab({ nombre: 'Ventana', tipo: 'ventana', w: 100, h: 12, color: '#bfe6ff' }));
   $('hab-add-alfombra').addEventListener('click', () => agregarItemHab({ nombre: 'Alfombra', tipo: 'alfombra', w: 200, h: 150, color: '#e3d3f0' }));
+  $('hab-add-tabique').addEventListener('click', () => {
+    const l = parseFloat($('hab-t-l').value), gr = parseFloat($('hab-t-g').value);
+    if (!(l > 0 && gr > 0)) { alert('Escribí el largo y el grosor de la división.'); return; }
+    agregarItemHab({ nombre: 'División', tipo: 'tabique', w: l, h: gr, color: '#8a8a8a' });
+  });
   $('hab-sync-madera').addEventListener('click', () => {
     sincronizar();
     let nuevos = 0, actualizados = 0;
@@ -1565,6 +1770,54 @@ if (typeof document !== 'undefined') {
     alert(`Listo: ${nuevos} mueble(s) nuevo(s) y ${actualizados} actualizado(s). Se usó el ancho y el fondo de cada mueble.`);
   });
 
+  /* ---- puertas (siempre sobre una pared) ---- */
+  function opcionesParedes() {
+    return geo().walls.map((w, i) => `<option value="${i}">Pared ${i + 1} (${FLECHA_DIR[w.dir]} ${fN(w.len)} cm)</option>`).join('');
+  }
+  function pintarHabPuertaForm() {
+    const keep = $('hab-p-pared').value, keep2 = $('hab-pe-pared').value;
+    $('hab-p-pared').innerHTML = opcionesParedes(); $('hab-pe-pared').innerHTML = opcionesParedes();
+    if (keep !== '' && +keep < geo().walls.length) $('hab-p-pared').value = keep;
+    if (keep2 !== '' && +keep2 < geo().walls.length) $('hab-pe-pared').value = keep2;
+    pintarHabPuertaEd();
+  }
+  $('hab-add-puerta').addEventListener('click', () => {
+    const hb = hab(), g = geo();
+    const i = Math.min(Math.max(0, +$('hab-p-pared').value || 0), g.walls.length - 1), wd = Math.max(30, parseFloat($('hab-p-w').value) || 80);
+    const raw = $('hab-p-pos').value;
+    const it = { id: Date.now() + Math.random(), nombre: 'Puerta', tipo: 'puerta', w: wd, h: wd, rot: 0, x: 0, y: 0, color: '#fff4cc', pared: i,
+      pos: raw === '' ? (g.walls[i].len - wd) / 2 : parseFloat(raw) || 0, bisagra: $('hab-p-bis').value, afuera: $('hab-p-lado').value === 'afuera' };
+    ubicarPuerta(g, it); hb.items.push(it); habSel = it.id; guardar(); refrescarHab();
+  });
+  function pintarHabPuertaEd() {
+    const it = habSel != null ? habIt(habSel) : null, ed = $('hab-puerta-ed');
+    const es = !!(it && it.tipo === 'puerta');
+    ed.hidden = !es; if (!es) return;
+    $('hab-pe-pared').value = it.pared; $('hab-pe-pos').value = it.pos; $('hab-pe-w').value = it.w;
+    $('hab-pe-bis').value = it.bisagra === 'fin' ? 'fin' : 'ini'; $('hab-pe-lado').value = it.afuera ? 'afuera' : 'adentro';
+  }
+  function editarPuerta() {
+    const it = habSel != null ? habIt(habSel) : null; if (!it || it.tipo !== 'puerta') return;
+    it.pared = +$('hab-pe-pared').value; it.pos = parseFloat($('hab-pe-pos').value) || 0;
+    it.w = Math.max(30, parseFloat($('hab-pe-w').value) || 80); it.bisagra = $('hab-pe-bis').value; it.afuera = $('hab-pe-lado').value === 'afuera';
+    ubicarPuerta(geo(), it); guardar(); pintarHabCanvas(); pintarHabMedidas(); pintarHabTabla();
+  }
+  ['hab-pe-pared', 'hab-pe-pos', 'hab-pe-w', 'hab-pe-bis', 'hab-pe-lado'].forEach(id => $(id).addEventListener('input', editarPuerta));
+  // Arrastrar una puerta: se pega a la pared más cercana y se desliza por ella.
+  function moverPuertaA(it, p) {
+    const g = geo(); let mejor = null;
+    g.walls.forEach(w => {
+      const t = Math.max(0, Math.min(w.len, (p.x - w.a.x) * w.dx + (p.y - w.a.y) * w.dy));
+      const qx = w.a.x + w.dx * t, qy = w.a.y + w.dy * t, d = Math.hypot(p.x - qx, p.y - qy);
+      if (!mejor || d < mejor.d) mejor = { d, i: w.i, t };
+    });
+    if (!mejor) return;
+    it.pared = mejor.i;
+    const grid = opcionesHab(); let pos = mejor.t - it.w / 2;
+    if (grid.snap && grid.grid > 0) pos = Math.round(pos / grid.grid) * grid.grid;
+    it.pos = pos; ubicarPuerta(g, it);
+  }
+
   /* ---- dibujo ---- */
   function dibujarItemHab(it, n, fs, esSel, mal) {
     const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2, w = it.w, h = it.h;
@@ -1572,26 +1825,33 @@ if (typeof document !== 'undefined') {
     const tr = `translate(${cx} ${cy}) rotate(${it.rot || 0}) ${it.flip ? 'scale(-1 1) ' : ''}translate(${-w / 2} ${-h / 2})`;
     let loc;
     if (it.tipo === 'puerta') {
-      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff4cc" fill-opacity=".6" stroke="${mal ? '#e00000' : '#c90'}" stroke-width="${sw}" stroke-dasharray="${fs * 0.5} ${fs * 0.3}"/>
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff4cc" fill-opacity="${it.afuera ? '.3' : '.6'}" stroke="${mal ? '#e00000' : '#c90'}" stroke-width="${sw}" stroke-dasharray="${fs * 0.5} ${fs * 0.3}"/>
         <path d="M ${w} 0 A ${w} ${w} 0 0 1 0 ${w}" fill="none" stroke="#c90" stroke-width="${fs * 0.12}"/>
         <line x1="0" y1="0" x2="0" y2="${w}" stroke="#7a5200" stroke-width="${fs * 0.45}"/>`;
     } else if (it.tipo === 'ventana') {
       loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#bfe6ff'}" stroke="#3a7bc8" stroke-width="${sw}"/><line x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" stroke="#3a7bc8" stroke-width="${fs * 0.08}"/>`;
     } else if (it.tipo === 'alfombra') {
       loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#e3d3f0'}" fill-opacity=".7" stroke="#8a6fa0" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}"/>`;
+    } else if (it.tipo === 'tabique') {
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#8a8a8a'}" stroke="${mal ? '#e00000' : '#2b2b2b'}" stroke-width="${mal ? fs * 0.3 : fs * 0.18}"/>`;
     } else {
       loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#d9b585'}" stroke="${stroke}" stroke-width="${sw}"/>`;
       if (h >= fs * 1.5) loc += `<line x1="${w * 0.15}" y1="${h - fs * 0.2}" x2="${w * 0.85}" y2="${h - fs * 0.2}" stroke="#222" stroke-width="${fs * 0.35}" stroke-linecap="round"/>`;
     }
     let out = `<g data-id="${it.id}" style="cursor:grab" transform="${tr}">${loc}</g>`;
-    // etiqueta (siempre derecha, sin girar)
     if (it.tipo !== 'ventana') {
-      const fz = fs * 0.85, cw = fz * 0.55, maxW = q.w * 0.94;
+      const fz = fs * 0.85, cw = fz * 0.55, maxW = Math.max(q.w, q.h) * 0.94;
+      const delgado = Math.min(q.w, q.h) < fz * 1.3;
       const nombre = `${n}. ${it.nombre}`;
       const dims = it.tipo === 'puerta' ? `${fN(it.w)} cm` : `${fN(it.w)}×${fN(it.h)}`;
-      let l1 = '';
-      if (q.h >= fz * 1.3) l1 = nombre.length * cw <= maxW ? nombre : (String(n).length * cw <= maxW ? String(n) : '');
-      const l2 = l1 && dims.length * cw <= maxW && q.h >= fz * 2.8 ? dims : '';
+      let l1 = '', l2 = '';
+      if (!delgado) {
+        if (q.h >= fz * 1.3) l1 = nombre.length * cw <= q.w * 0.94 ? nombre : (String(n).length * cw <= q.w * 0.94 ? String(n) : '');
+        l2 = l1 && dims.length * cw <= q.w * 0.94 && q.h >= fz * 2.8 ? dims : '';
+      } else if (it.tipo === 'tabique') {
+        const lado = q.w >= q.h; // división larga y fina: etiqueta al costado
+        out += `<text x="${lado ? cx : q.x2 + fz * 0.6}" y="${lado ? q.y2 + fz * 1.1 : cy}" font-size="${fz * 0.9}" text-anchor="${lado ? 'middle' : 'start'}" dominant-baseline="middle" stroke="#fff" stroke-width="${fz * 0.3}" paint-order="stroke" pointer-events="none">${esc(nombre)} · ${dims}</text>`;
+      }
       const at = `font-size="${fz}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="${fz * 0.3}" paint-order="stroke" pointer-events="none"`;
       if (l1) out += `<text x="${cx}" y="${l2 ? cy - fz * 0.6 : cy}" ${at}>${esc(l1)}</text>`;
       if (l2) out += `<text x="${cx}" y="${cy + fz * 0.7}" ${at} font-weight="normal">${esc(l2)}</text>`;
@@ -1600,35 +1860,44 @@ if (typeof document !== 'undefined') {
     return out;
   }
   function construirHabSvg(sel, exportar) {
-    const hb = hab(), rv = habRv;
-    const pad = Math.max(hb.ancho, hb.largo) * 0.09 + 12, fs = Math.max(hb.ancho, hb.largo) / 50;
-    const vb = [-pad, -pad, hb.ancho + 2 * pad, hb.largo + 2 * pad];
-    let g = `<rect x="0" y="0" width="${hb.ancho}" height="${hb.largo}" fill="#fff"/>`;
-    for (let x = 50; x < hb.ancho; x += 50) g += `<line x1="${x}" y1="0" x2="${x}" y2="${hb.largo}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
-    for (let y = 50; y < hb.largo; y += 50) g += `<line x1="0" y1="${y}" x2="${hb.ancho}" y2="${y}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
-    g += `<rect x="0" y="0" width="${hb.ancho}" height="${hb.largo}" fill="none" stroke="#444" stroke-width="${fs * 0.4}"/>`;
-    g += `<text x="${hb.ancho / 2}" y="${-pad * 0.42}" text-anchor="middle" font-size="${fs}" font-weight="bold">${fN(hb.ancho)} cm</text>`;
-    g += `<text transform="translate(${-pad * 0.42},${hb.largo / 2}) rotate(-90)" text-anchor="middle" font-size="${fs}" font-weight="bold">${fN(hb.largo)} cm</text>`;
-    if (exportar) g += `<text x="0" y="${-pad * 0.78}" font-size="${fs * 1.2}" font-weight="bold">${esc(hb.nombre)}</text>`;
-    const orden = { alfombra: 0, ventana: 1, mueble: 2, puerta: 3 };
+    const hb = hab(), rv = habRv, g = geo(), W = g.w, H = g.h;
+    const pad = Math.max(W, H) * 0.12 + 14, fs = Math.max(W, H) / 50;
+    const vb = [-pad, -pad, W + 2 * pad, H + 2 * pad];
+    const d = 'M ' + g.pts.map(p => `${p.x} ${p.y}`).join(' L ') + ' Z';
+    let o = `<defs><clipPath id="hab-clip"><path d="${d}"/></clipPath></defs><path d="${d}" fill="#fff"/><g clip-path="url(#hab-clip)">`;
+    for (let x = 50; x < W; x += 50) o += `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
+    for (let y = 50; y < H; y += 50) o += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
+    o += `</g><path d="${d}" fill="none" stroke="#444" stroke-width="${fs * 0.4}" stroke-linejoin="miter"/>`;
+    // aberturas de las puertas en la pared
+    hb.items.filter(i => i.tipo === 'puerta' && i.ax !== undefined).forEach(p => {
+      o += `<line x1="${p.ax}" y1="${p.ay}" x2="${p.bx}" y2="${p.by}" stroke="#fff" stroke-width="${fs * 0.62}"/>`;
+    });
+    // medida de cada pared
+    g.walls.forEach(w => {
+      const mx = (w.a.x + w.b.x) / 2, my = (w.a.y + w.b.y) / 2, off = w.dx !== 0 ? fs * 1.5 : fs * 3.6;
+      o += `<text x="${mx - w.nx * off}" y="${my - w.ny * off}" text-anchor="middle" dominant-baseline="middle" font-size="${fs * 0.9}" font-weight="bold" fill="#333">${w.i + 1} ${FLECHA_DIR[w.dir]} ${fN(w.len)} cm</text>`;
+    });
+    if (exportar) o += `<text x="0" y="${-pad * 0.8}" font-size="${fs * 1.2}" font-weight="bold">${esc(hb.nombre)}</text>`;
+    const orden = { alfombra: 0, ventana: 1, tabique: 2, mueble: 3, puerta: 4 };
     hb.items.map((it, i) => ({ it, n: i + 1 })).sort((a, b) => orden[a.it.tipo] - orden[b.it.tipo])
-      .forEach(({ it, n }) => { g += dibujarItemHab(it, n, fs, it.id === sel, !!(rv && rv.ids.has(it.id))); });
+      .forEach(({ it, n }) => { o += dibujarItemHab(it, n, fs, it.id === sel, !!(rv && rv.ids.has(it.id))); });
     const it = sel != null ? habIt(sel) : null;
-    if (it && !exportar && $('hab-dist').checked) {
-      const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2, fz = fs * 0.8;
-      const L = q.x, R = hb.ancho - q.x2, T = q.y, B = hb.largo - q.y2;
-      const seg = (x1, y1, x2, y2, v, tx, ty) => v < 0.5 ? '' :
+    if (it && !exportar && $('hab-dist').checked && it.tipo !== 'puerta') {
+      const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2, fz = fs * 0.8, dd = distParedes(g, q);
+      const seg = (x1, y1, x2, y2, v, tx, ty) => v === null || v < 0.5 ? '' :
         `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#0a7" stroke-width="${fs * 0.12}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}"/>` +
         `<text x="${tx}" y="${ty}" font-size="${fz}" font-weight="bold" fill="#066" text-anchor="middle" stroke="#fff" stroke-width="${fz * 0.3}" paint-order="stroke" pointer-events="none">${fN(v)}</text>`;
-      g += seg(0, cy, q.x, cy, L, q.x / 2, cy - fz * 0.4) + seg(q.x2, cy, hb.ancho, cy, R, (q.x2 + hb.ancho) / 2, cy - fz * 0.4)
-        + seg(cx, 0, cx, q.y, T, cx + fz * 0.9, q.y / 2) + seg(cx, q.y2, cx, hb.largo, B, cx + fz * 0.9, (q.y2 + hb.largo) / 2);
+      o += seg(q.x - (dd.L || 0), cy, q.x, cy, dd.L, q.x - (dd.L || 0) / 2, cy - fz * 0.4)
+        + seg(q.x2, cy, q.x2 + (dd.R || 0), cy, dd.R, q.x2 + (dd.R || 0) / 2, cy - fz * 0.4)
+        + seg(cx, q.y - (dd.T || 0), cx, q.y, dd.T, cx + fz * 0.9, q.y - (dd.T || 0) / 2)
+        + seg(cx, q.y2, cx, q.y2 + (dd.B || 0), dd.B, cx + fz * 0.9, q.y2 + (dd.B || 0) / 2);
     }
     if (!exportar) habGuias.forEach(gd => {
-      g += gd.eje === 'x'
-        ? `<line x1="${gd.pos}" y1="0" x2="${gd.pos}" y2="${hb.largo}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`
-        : `<line x1="0" y1="${gd.pos}" x2="${hb.ancho}" y2="${gd.pos}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`;
+      o += gd.eje === 'x'
+        ? `<line x1="${gd.pos}" y1="0" x2="${gd.pos}" y2="${H}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`
+        : `<line x1="0" y1="${gd.pos}" x2="${W}" y2="${gd.pos}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`;
     });
-    return { vb, inner: g };
+    return { vb, inner: o };
   }
   function pintarHabCanvas() {
     habRv = revisarHabitacion(hab());
@@ -1641,36 +1910,40 @@ if (typeof document !== 'undefined') {
   function pintarHabRevision() {
     const rv = habRv, hb = hab();
     const nMue = hb.items.filter(i => i.tipo === 'mueble').length;
-    $('hab-resumen').innerHTML = `<b>${fN(hb.ancho / 100)} × ${fN(hb.largo / 100)} m</b> = ${fN(rv.areaHab)} m² · ${nMue} mueble(s) ocupan ${fN(rv.areaMuebles)} m² (${Math.round(rv.pct)}% del piso)`;
+    $('hab-resumen').innerHTML = `<b>${fN(rv.areaHab)} m²</b> de cuarto · ${nMue} mueble(s) ocupan ${fN(rv.areaMuebles)} m² (${Math.round(rv.pct)}% del piso)`;
     $('hab-rev').innerHTML = rv.problemas.length
       ? rv.problemas.map(p => `<div class="aviso${p.nivel === 'aviso' ? ' warn' : ''}">${p.nivel === 'error' ? '⚠' : 'ℹ'} ${esc(p.texto)} <span class="no-print">${p.ids.slice(0, 2).map(id => `<button data-hver="${id}">Ver</button>`).join(' ')}</span></div>`).join('')
-      : '<div class="ok-box">✔ Todo cabe: nada se sale de la habitación ni se monta con otro mueble ni con el giro de una puerta.</div>';
+      : '<div class="ok-box">✔ Todo cabe: nada se sale de la habitación ni se monta con otro mueble, con una división ni con el giro de una puerta.</div>';
   }
   $('hab-rev').addEventListener('click', ev => {
     const b = ev.target.closest('button[data-hver]'); if (!b) return;
-    habSel = Number(b.dataset.hver); pintarHabCanvas();
+    habSel = Number(b.dataset.hver); pintarHabCanvas(); pintarHabPuertaEd();
   });
 
   /* ---- tablas ---- */
   function pintarHabTabla() {
     const num_ = (i, k, v, extra = '') => `<input type="number" step="1" ${extra} data-hr="${i}" data-k="${k}" value="${v}">`;
-    $('hab-tabla').tBodies[0].innerHTML = hab().items.map((it, i) => `<tr data-rid="${it.id}"${it.id === habSel ? ' class="sel"' : ''}>
+    $('hab-tabla').tBodies[0].innerHTML = hab().items.map((it, i) => {
+      const pu = it.tipo === 'puerta';
+      return `<tr data-rid="${it.id}"${it.id === habSel ? ' class="sel"' : ''}>
       <td>${i + 1}</td>
       <td><input type="color" data-hr="${i}" data-k="color" value="${/^#[0-9a-f]{6}$/i.test(it.color || '') ? it.color : '#d9b585'}"></td>
       <td><input data-hr="${i}" data-k="nombre" value="${esc(it.nombre)}"></td>
       <td class="tt">${TIPO_TXT[it.tipo] || it.tipo}</td>
       <td>${num_(i, 'w', it.w, 'min="1"')}</td>
-      <td>${it.tipo === 'puerta' ? '—' : num_(i, 'h', it.h, 'min="1"')}</td>
-      <td><select data-hr="${i}" data-k="rot">${[0, 90, 180, 270].map(g => `<option value="${g}"${(it.rot || 0) === g ? ' selected' : ''}>${g}°</option>`).join('')}</select></td>
-      <td>${num_(i, 'x', it.x)}</td><td>${num_(i, 'y', it.y)}</td>
-      <td><button data-hrot="${i}" title="Girar 90°">↻</button><button data-hdup="${i}" title="Duplicar">⧉</button><button class="danger" data-hdel="${i}" title="Eliminar">🗑</button></td></tr>`).join('');
+      <td>${pu ? '—' : num_(i, 'h', it.h, 'min="1"')}</td>
+      <td>${pu ? '—' : `<select data-hr="${i}" data-k="rot">${[0, 90, 180, 270].map(g => `<option value="${g}"${(it.rot || 0) === g ? ' selected' : ''}>${g}°</option>`).join('')}</select>`}</td>
+      <td>${pu ? `<small>Pared ${it.pared + 1}</small>` : num_(i, 'x', it.x)}</td><td>${pu ? `<small>a ${fN(it.pos)} cm</small>` : num_(i, 'y', it.y)}</td>
+      <td>${pu ? '' : `<button data-hrot="${i}" title="Girar 90°">↻</button>`}<button data-hdup="${i}" title="Duplicar">⧉</button><button class="danger" data-hdel="${i}" title="Eliminar">🗑</button></td></tr>`;
+    }).join('');
   }
   function pintarHabMedidas() {
-    const hb = hab();
+    const hb = hab(), g = geo();
+    const c = v => v === null ? '—' : `<b>${fN(v)}</b>`;
     $('hab-medidas').tBodies[0].innerHTML = hb.items.map((it, i) => {
-      const q = rectHab(it);
-      return `<tr><td>${i + 1}</td><td>${esc(it.nombre)} <small>(${TIPO_TXT[it.tipo]})</small></td><td>${fN(it.w)} × ${fN(it.h)}</td><td>${it.rot || 0}°</td>
-        <td><b>${fN(q.x)}</b></td><td><b>${fN(q.y)}</b></td><td><b>${fN(hb.ancho - q.x2)}</b></td><td><b>${fN(hb.largo - q.y2)}</b></td></tr>`;
+      if (it.tipo === 'puerta') return `<tr><td>${i + 1}</td><td>${esc(it.nombre)} <small>(Puerta, abre hacia ${it.afuera ? 'afuera' : 'adentro'})</small></td><td>${fN(it.w)} cm de ancho</td><td colspan="4">En la pared ${it.pared + 1}: empieza a <b>${fN(it.pos)}</b> cm del inicio de la pared y termina a <b>${fN(g.walls[it.pared] ? g.walls[it.pared].len - it.pos - it.w : 0)}</b> cm del final · bisagra al ${it.bisagra === 'fin' ? 'final' : 'inicio'}</td></tr>`;
+      const q = rectHab(it), dd = distParedes(g, q);
+      return `<tr><td>${i + 1}</td><td>${esc(it.nombre)} <small>(${TIPO_TXT[it.tipo]})</small></td><td>${fN(it.w)} × ${fN(it.h)}</td><td>${it.rot || 0}°</td><td>${c(dd.L)}</td><td>${c(dd.T)}</td><td>${c(dd.R)}</td><td>${c(dd.B)}</td></tr>`;
     }).join('') || '<tr><td colspan="8" class="hint">Todavía no hay muebles en la habitación.</td></tr>';
   }
   function actualizarFilaXY(it) {
@@ -1683,14 +1956,14 @@ if (typeof document !== 'undefined') {
     if (k === 'nombre') it.nombre = t.value;
     else if (k === 'color') it.color = t.value;
     else if (k === 'rot') fijarRot(it, +t.value);
-    else { it[k] = parseFloat(t.value) || 0; if (it.tipo === 'puerta' && k === 'w') it.h = it.w; }
-    if (k !== 'nombre' && k !== 'color' && k !== 'rot') clampHab(it);
+    else { it[k] = parseFloat(t.value) || 0; if (it.tipo === 'puerta' && k === 'w') { it.w = Math.max(30, it.w); ubicarPuerta(geo(), it); } }
+    if (k !== 'nombre' && k !== 'color' && k !== 'rot' && it.tipo !== 'puerta') clampHab(it);
     habSel = it.id; guardar(); pintarHabCanvas(); pintarHabMedidas();
   });
-  $('hab-tabla').addEventListener('change', ev => { if (ev.target.dataset.hr !== undefined) pintarHabTabla(); pintarHabCanvas(); });
+  $('hab-tabla').addEventListener('change', ev => { if (ev.target.dataset.hr !== undefined) { pintarHabTabla(); pintarHabCanvas(); pintarHabPuertaEd(); } });
   $('hab-tabla').addEventListener('focusin', ev => {
     const i = ev.target.dataset && ev.target.dataset.hr; if (i === undefined) return;
-    const it = hab().items[+i]; if (it && it.id !== habSel) { habSel = it.id; pintarHabCanvas(); }
+    const it = hab().items[+i]; if (it && it.id !== habSel) { habSel = it.id; pintarHabCanvas(); pintarHabPuertaEd(); }
   });
   $('hab-tabla').addEventListener('click', ev => {
     const b = ev.target.closest('button'); if (!b) return;
@@ -1702,8 +1975,11 @@ if (typeof document !== 'undefined') {
     guardar(); refrescarHab();
   });
   function duplicarHab(it) {
-    const c = Object.assign({}, it, { id: Date.now() + Math.random(), x: it.x + 10, y: it.y + 10 });
-    delete c.origen; clampHab(c); hab().items.push(c); habSel = c.id;
+    const c = Object.assign({}, it, { id: Date.now() + Math.random() });
+    delete c.origen;
+    if (it.tipo === 'puerta') { c.pos = it.pos + it.w + 10; ubicarPuerta(geo(), c); }
+    else { c.x = it.x + 10; c.y = it.y + 10; clampHab(c); }
+    hab().items.push(c); habSel = c.id;
   }
 
   /* ---- barra de acciones sobre el mueble seleccionado ---- */
@@ -1711,29 +1987,41 @@ if (typeof document !== 'undefined') {
     const b = ev.target.closest('button[data-act]'); if (!b) return;
     const it = habSel != null ? habIt(habSel) : null;
     if (!it) { alert('Tocá primero un mueble en el plano (o en la lista) para seleccionarlo.'); return; }
-    const hb = hab(), q = rectHab(it);
-    switch (b.dataset.act) {
-      case 'rotd': fijarRot(it, (it.rot || 0) + 90); break;
-      case 'rotl': fijarRot(it, (it.rot || 0) - 90); break;
-      case 'flip': if (it.tipo === 'puerta') it.flip = !it.flip; else alert('Voltear sirve para puertas (cambia el lado de la bisagra). Para un mueble usá Girar.'); break;
-      case 'izq': it.x = 0; break;
-      case 'der': it.x = hb.ancho - q.w; break;
-      case 'arr': it.y = 0; break;
-      case 'aba': it.y = hb.largo - q.h; break;
-      case 'ch': it.x = (hb.ancho - q.w) / 2; break;
-      case 'cv': it.y = (hb.largo - q.h) / 2; break;
-      case 'dup': duplicarHab(it); break;
-      case 'del': hb.items.splice(hb.items.indexOf(it), 1); habSel = null; break;
+    const hb = hab(), g = geo(), q = rectHab(it), a = b.dataset.act;
+    if (it.tipo === 'puerta') {
+      if (a === 'flip') { it.bisagra = it.bisagra === 'fin' ? 'ini' : 'fin'; ubicarPuerta(g, it); }
+      else if (a === 'dup') duplicarHab(it);
+      else if (a === 'del') { hb.items.splice(hb.items.indexOf(it), 1); habSel = null; }
+      else { alert('Una puerta va siempre sobre una pared: arrastrala por las paredes o usá el panel “Puerta seleccionada” para cambiar la pared, la posición, la bisagra y hacia dónde abre.'); return; }
+    } else {
+      switch (a) {
+        case 'rotd': fijarRot(it, (it.rot || 0) + 90); break;
+        case 'rotl': fijarRot(it, (it.rot || 0) - 90); break;
+        case 'flip': alert('Voltear sirve para puertas (cambia el lado de la bisagra). Para un mueble usá Girar.'); return;
+        case 'izq': it.x = 0; break;
+        case 'der': it.x = g.w - q.w; break;
+        case 'arr': it.y = 0; break;
+        case 'aba': it.y = g.h - q.h; break;
+        case 'ch': it.x = (g.w - q.w) / 2; break;
+        case 'cv': it.y = (g.h - q.h) / 2; break;
+        case 'dup': duplicarHab(it); break;
+        case 'del': hb.items.splice(hb.items.indexOf(it), 1); habSel = null; break;
+      }
+      if (hb.items.includes(it)) clampHab(it);
     }
-    if (it && hb.items.includes(it)) clampHab(it);
     guardar(); refrescarHab();
   });
   document.addEventListener('keydown', ev => {
     if (vistaActual !== 'hab' || habSel == null || /INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) return;
     const it = habIt(habSel); if (!it) return;
     const p = ev.shiftKey ? 10 : 1;
-    if (ev.key === 'r' || ev.key === 'R') fijarRot(it, (it.rot || 0) + 90);
-    else if (ev.key === 'Delete' || ev.key === 'Backspace') { hab().items.splice(hab().items.indexOf(it), 1); habSel = null; }
+    if (ev.key === 'Delete' || ev.key === 'Backspace') { hab().items.splice(hab().items.indexOf(it), 1); habSel = null; }
+    else if (it.tipo === 'puerta') {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { it.pos += p; ubicarPuerta(geo(), it); }
+      else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { it.pos -= p; ubicarPuerta(geo(), it); }
+      else return;
+    }
+    else if (ev.key === 'r' || ev.key === 'R') fijarRot(it, (it.rot || 0) + 90);
     else if (ev.key === 'ArrowLeft') { it.x -= p; clampHab(it); }
     else if (ev.key === 'ArrowRight') { it.x += p; clampHab(it); }
     else if (ev.key === 'ArrowUp') { it.y -= p; clampHab(it); }
@@ -1750,22 +2038,23 @@ if (typeof document !== 'undefined') {
   }
   $('hab-canvas').addEventListener('pointerdown', ev => {
     const g = ev.target.closest('[data-id]');
-    if (!g) { habSel = null; habGuias = []; pintarHabCanvas(); return; }
+    if (!g) { habSel = null; habGuias = []; pintarHabCanvas(); pintarHabPuertaEd(); return; }
     const it = habIt(Number(g.dataset.id)); if (!it) return;
     habSel = it.id;
     const p = ptHab(ev);
     habDrag = { it, dx: p.x - it.x, dy: p.y - it.y };
     $('hab-canvas').setPointerCapture(ev.pointerId);
-    pintarHabCanvas();
+    pintarHabCanvas(); pintarHabPuertaEd();
   });
   $('hab-canvas').addEventListener('pointermove', ev => {
     if (!habDrag) return;
     const p = ptHab(ev), it = habDrag.it;
+    if (it.tipo === 'puerta') { moverPuertaA(it, p); habGuias = []; pintarHabCanvas(); pintarHabMedidas(); pintarHabPuertaEd(); return; }
     const s2 = snapMove(it, p.x - habDrag.dx, p.y - habDrag.dy, hab(), opcionesHab());
     it.x = s2.x; it.y = s2.y; habGuias = s2.guias;
     pintarHabCanvas(); actualizarFilaXY(it); pintarHabMedidas();
   });
-  const finHabDrag = () => { if (!habDrag) return; habDrag = null; habGuias = []; guardar(); pintarHabCanvas(); };
+  const finHabDrag = () => { if (!habDrag) return; habDrag = null; habGuias = []; guardar(); pintarHabCanvas(); pintarHabTabla(); };
   $('hab-canvas').addEventListener('pointerup', finHabDrag);
   $('hab-canvas').addEventListener('pointercancel', finHabDrag);
 
@@ -1793,8 +2082,8 @@ if (typeof document !== 'undefined') {
     window.print();
   });
 
-  function refrescarHab() { pintarHabTabla(); pintarHabCanvas(); pintarHabMedidas(); }
-  function pintarHab() { pintarHabTabs(); refrescarHab(); }
+  function refrescarHab() { pintarHabTabla(); pintarHabCanvas(); pintarHabMedidas(); pintarHabPuertaEd(); }
+  function pintarHab() { pintarHabTabs(); pintarHabParedes(); pintarHabPuertaForm(); refrescarHab(); }
 
   /* ---- Secciones contraíbles ---- */
   const CLAVE_UI = 'calcMuebles_ui';
@@ -1858,4 +2147,4 @@ if (typeof document !== 'undefined') {
   mostrarVista(cargarUI().vista === 'hab' ? 'hab' : 'cortes');
 }
 
-if (typeof module !== 'undefined') module.exports = { PRESETS_HAB, nuevaHab, rectHab, revisarHabitacion, posicionLibre, snapMove, revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { geomHab, rectDentro, distParedes, ubicarPuerta, cerrarParedes, paredesRect, esRectangular, PRESETS_HAB, nuevaHab, rectHab, revisarHabitacion, posicionLibre, snapMove, revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

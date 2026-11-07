@@ -114,3 +114,11 @@ main[hidden]{display:none}
 body.print-hab .card:not(#hab-plano-sec):not(#hab-sec-med){display:none!important}
 body.print-hab #hab-plano-sec,body.print-hab #hab-sec-med{display:block!important}
 body.print-hab #hab-sec-med{break-before:page}
+.row[hidden]{display:none}
+.paredes-det{margin:10px 0;border:1px solid #e3d6c5;border-radius:8px;padding:8px 12px;background:#fbf8f3}
+.paredes-det summary{cursor:pointer;font-weight:bold;color:#6b4423}
+#hab-paredes td input{min-width:80px}
+#hab-paredes select{min-width:200px}
+.ok-txt{color:#1d6b32;font-weight:bold}
+.mal-txt{color:#b00020;font-weight:bold}
+#hab-sec-add h3{margin:14px 0 6px;font-size:1rem;color:#6b4423}
