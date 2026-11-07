@@ -664,10 +664,106 @@ function revisarDiseno(d) {
   return { pl, problemas: probs, notas, okPiezas };
 }
 
+/* ====== HABITACIÓN (distribución de muebles, vista desde arriba) ====== */
+// [nombre, ancho, fondo, color]  — medidas en cm
+const PRESETS_HAB = [
+  ['Cama individual', 90, 190, '#9ec5e8'], ['Cama matrimonial', 135, 190, '#9ec5e8'], ['Cama queen', 150, 200, '#9ec5e8'],
+  ['Cama king', 190, 200, '#9ec5e8'], ['Cuna', 60, 120, '#9ec5e8'],
+  ['Mesa de noche', 45, 40, '#d9b585'], ['Cómoda', 100, 45, '#d9b585'], ['Clóset', 120, 60, '#d9b585'],
+  ['Librero / estante', 80, 30, '#d9b585'], ['Escritorio', 120, 60, '#d9b585'], ['Silla', 45, 45, '#c9c9c9'],
+  ['Sofá 2 puestos', 150, 90, '#a6d5a0'], ['Sofá 3 puestos', 200, 90, '#a6d5a0'],
+  ['Mesa de comedor (4)', 120, 80, '#d9b585'], ['Mesa de comedor (6)', 160, 90, '#d9b585'],
+  ['Mueble de TV', 150, 40, '#d9b585'], ['Refrigeradora', 70, 70, '#cfd8dc'], ['Cocina', 60, 60, '#cfd8dc'], ['Lavadora', 60, 60, '#cfd8dc'],
+];
+
+function nuevaHab(n) { return { nombre: 'Habitación ' + n, ancho: 400, largo: 300, items: [] }; }
+
+// Rectángulo que ocupa un elemento ya girado (rot en pasos de 90°). x,y = esquina superior izquierda.
+function rectHab(it) {
+  const sw = (it.rot || 0) % 180 !== 0;
+  const w = sw ? it.h : it.w, h = sw ? it.w : it.h;
+  return { x: it.x, y: it.y, w, h, x2: it.x + w, y2: it.y + h };
+}
+
+function revisarHabitacion(hb) {
+  const E = 0.5, probs = [], ids = new Set();
+  const nm = it => `“${it.nombre}”`;
+  const add = (nivel, texto, items) => { probs.push({ nivel, texto, ids: items.map(i => i.id) }); items.forEach(i => ids.add(i.id)); };
+  const ov = (a, b) => ({ ox: Math.min(a.x2, b.x2) - Math.max(a.x, b.x), oy: Math.min(a.y2, b.y2) - Math.max(a.y, b.y) });
+  const its = hb.items;
+  its.forEach(it => {
+    const q = rectHab(it), f = [];
+    if (q.x < -E) f.push(`${fN(-q.x)} cm por la izquierda`);
+    if (q.x2 > hb.ancho + E) f.push(`${fN(q.x2 - hb.ancho)} cm por la derecha`);
+    if (q.y < -E) f.push(`${fN(-q.y)} cm por arriba`);
+    if (q.y2 > hb.largo + E) f.push(`${fN(q.y2 - hb.largo)} cm por abajo`);
+    if (f.length) add('error', `${nm(it)} se sale de la habitación (${f.join(', ')}).`, [it]);
+  });
+  const muebles = its.filter(i => i.tipo === 'mueble'), puertas = its.filter(i => i.tipo === 'puerta');
+  for (let i = 0; i < muebles.length; i++) for (let j = i + 1; j < muebles.length; j++) {
+    const { ox, oy } = ov(rectHab(muebles[i]), rectHab(muebles[j]));
+    if (ox > E && oy > E) add('error', `${nm(muebles[i])} y ${nm(muebles[j])} se montan ${fN(ox)} × ${fN(oy)} cm.`, [muebles[i], muebles[j]]);
+  }
+  puertas.forEach(p => {
+    const rp = rectHab(p);
+    muebles.forEach(m => {
+      const { ox, oy } = ov(rp, rectHab(m));
+      if (ox > E && oy > E) add('aviso', `${nm(m)} estorba el giro de la puerta ${nm(p)}: la puerta no podrá abrir completa (se montan ${fN(ox)} × ${fN(oy)} cm).`, [m, p]);
+    });
+  });
+  for (let i = 0; i < puertas.length; i++) for (let j = i + 1; j < puertas.length; j++) {
+    const { ox, oy } = ov(rectHab(puertas[i]), rectHab(puertas[j]));
+    if (ox > E && oy > E) add('aviso', `El giro de ${nm(puertas[i])} y de ${nm(puertas[j])} se cruzan.`, [puertas[i], puertas[j]]);
+  }
+  const areaHab = hb.ancho * hb.largo / 10000;
+  const areaMuebles = muebles.reduce((t, m) => t + m.w * m.h, 0) / 10000;
+  return { problemas: probs, ids, areaHab, areaMuebles, pct: areaHab > 0 ? 100 * areaMuebles / areaHab : 0 };
+}
+
+// Primer lugar libre (recorriendo de 10 en 10 cm) donde cabe el elemento sin montarse en otros.
+function posicionLibre(hb, it) {
+  const b = rectHab(Object.assign({}, it, { x: 0, y: 0 }));
+  const ocup = hb.items.filter(o => o.tipo === 'mueble' || o.tipo === 'puerta').map(rectHab);
+  for (let y = 0; y <= hb.largo - b.h + 0.01; y += 10) for (let x = 0; x <= hb.ancho - b.w + 0.01; x += 10) {
+    const libre = ocup.every(o => !(Math.min(x + b.w, o.x2) - Math.max(x, o.x) > 0.5 && Math.min(y + b.h, o.y2) - Math.max(y, o.y) > 0.5));
+    if (libre) return { x, y };
+  }
+  return { x: 0, y: 0 };
+}
+
+// Al arrastrar: se pega a paredes, centro y bordes de otros muebles (si está cerca) o a la cuadrícula.
+function snapMove(it, x, y, hb, o) {
+  const op = Object.assign({ snap: true, grid: 5, thr: 4 }, o || {});
+  const b = rectHab(Object.assign({}, it, { x: 0, y: 0 }));
+  const otros = hb.items.filter(q => q.id !== it.id && (q.tipo === 'mueble' || q.tipo === 'puerta')).map(rectHab);
+  const guias = [];
+  const elegir = (val, cands, grid) => {
+    let mejor = null;
+    if (op.snap) cands.forEach(c => { const d = Math.abs(c.v - val); if (d <= op.thr && (!mejor || d < mejor.d)) mejor = { d, c }; });
+    if (mejor) return { v: mejor.c.v, g: mejor.c.g };
+    return { v: grid > 0 && op.snap ? Math.round(val / grid) * grid : val, g: null };
+  };
+  const cx = [{ v: 0, g: 0 }, { v: hb.ancho - b.w, g: hb.ancho }, { v: (hb.ancho - b.w) / 2, g: hb.ancho / 2 }];
+  const cy = [{ v: 0, g: 0 }, { v: hb.largo - b.h, g: hb.largo }, { v: (hb.largo - b.h) / 2, g: hb.largo / 2 }];
+  otros.forEach(q => {
+    cx.push({ v: q.x2, g: q.x2 }, { v: q.x - b.w, g: q.x }, { v: q.x, g: q.x }, { v: q.x2 - b.w, g: q.x2 }, { v: q.x + q.w / 2 - b.w / 2, g: q.x + q.w / 2 });
+    cy.push({ v: q.y2, g: q.y2 }, { v: q.y - b.h, g: q.y }, { v: q.y, g: q.y }, { v: q.y2 - b.h, g: q.y2 }, { v: q.y + q.h / 2 - b.h / 2, g: q.y + q.h / 2 });
+  });
+  const sx = elegir(x, cx, op.grid), sy = elegir(y, cy, op.grid);
+  if (sx.g !== null) guias.push({ eje: 'x', pos: sx.g });
+  if (sy.g !== null) guias.push({ eje: 'y', pos: sy.g });
+  return {
+    x: r(Math.max(0, Math.min(hb.ancho - b.w, sx.v))),
+    y: r(Math.max(0, Math.min(hb.largo - b.h, sy.v))),
+    guias,
+  };
+}
+
 /* ====== INTERFAZ ====== */
 if (typeof document !== 'undefined') {
   const CLAVE = 'calcMuebles_v1';
   let estado = cargar();
+  let vistaActual = 'cortes';
 
   function porDefecto() {
     return {
@@ -698,7 +794,17 @@ if (typeof document !== 'undefined') {
       if (!m.diseno.esp) m.diseno.esp = 2;
       if (!Array.isArray(m.piezas)) m.piezas = [];
       if (m.incluir === undefined) m.incluir = true;
+      if (!m.uid) m.uid = Date.now() + Math.random();
     });
+    if (!Array.isArray(s.habs) || !s.habs.length) s.habs = [nuevaHab(1)];
+    s.habs.forEach((hb, i) => {
+      if (!hb.nombre) hb.nombre = 'Habitación ' + (i + 1);
+      if (!(hb.ancho > 0)) hb.ancho = 400;
+      if (!(hb.largo > 0)) hb.largo = 300;
+      if (!Array.isArray(hb.items)) hb.items = [];
+      hb.items.forEach(it => { if (!it.tipo) it.tipo = 'mueble'; if (!it.rot) it.rot = 0; });
+    });
+    if (!(s.habActiva >= 0 && s.habActiva < s.habs.length)) s.habActiva = 0;
     if (!(s.activo >= 0 && s.activo < s.muebles.length)) s.activo = 0;
     s.diseno = s.muebles[s.activo].diseno;
     s.piezas = s.muebles[s.activo].piezas;
@@ -942,7 +1048,7 @@ if (typeof document !== 'undefined') {
   });
   $('m-add').addEventListener('click', () => {
     sincronizar();
-    estado.muebles.push({ nombre: 'Mueble ' + (estado.muebles.length + 1), diseno: nuevoDiseno(), piezas: [] });
+    estado.muebles.push({ nombre: 'Mueble ' + (estado.muebles.length + 1), diseno: nuevoDiseno(), piezas: [], uid: Date.now() + Math.random() });
     irAMueble(estado.muebles.length - 1);
   });
   $('m-dup').addEventListener('click', () => {
@@ -950,6 +1056,7 @@ if (typeof document !== 'undefined') {
     const o = estado.muebles[estado.activo], c = JSON.parse(JSON.stringify(o));
     c.nombre = o.nombre + ' (opción 2)';
     c.incluir = true;
+    c.uid = Date.now() + Math.random();
     c.diseno.el.forEach(e => e.id = Date.now() + Math.random());
     estado.muebles.push(c);
     irAMueble(estado.muebles.length - 1);
@@ -1104,7 +1211,7 @@ if (typeof document !== 'undefined') {
   }
   $('d-borrar-sel').addEventListener('click', borrarSelDiseno);
   document.addEventListener('keydown', ev => {
-    if ((ev.key === 'Delete' || ev.key === 'Backspace') && selId && !/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) borrarSelDiseno();
+    if (vistaActual === 'cortes' && (ev.key === 'Delete' || ev.key === 'Backspace') && selId && !/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) borrarSelDiseno();
   });
   $('d-limpiar').addEventListener('click', () => {
     if (confirm('¿Borrar todo el diseño?')) { dis().el = []; selId = null; guardar(); pintarTablaDiseno(); pintarCanvas(); }
@@ -1320,11 +1427,335 @@ if (typeof document !== 'undefined') {
   });
 
 
+  /* ================= HABITACIÓN ================= */
+  let habSel = null, habDrag = null, habGuias = [], habRv = null;
+  const hab = () => estado.habs[estado.habActiva];
+  const habIt = id => hab().items.find(i => i.id === id);
+  const TIPO_TXT = { mueble: 'Mueble', alfombra: 'Alfombra', puerta: 'Puerta', ventana: 'Ventana' };
+
+  function mostrarVista(v) {
+    vistaActual = v;
+    $('vista-cortes').hidden = v !== 'cortes';
+    $('vista-hab').hidden = v !== 'hab';
+    document.querySelectorAll('#nav-vistas button').forEach(b => b.classList.toggle('act', b.dataset.vista === v));
+    const u = cargarUI(); u.vista = v; guardarUI(u);
+    if (v === 'hab') pintarHab();
+  }
+  $('nav-vistas').addEventListener('click', ev => { const b = ev.target.closest('button[data-vista]'); if (b) mostrarVista(b.dataset.vista); });
+
+  function opcionesHab() { return { snap: $('hab-snap').checked, grid: +$('hab-grid').value, thr: 4 }; }
+  function clampHab(it) {
+    const hb = hab(), q = rectHab(it);
+    it.x = r(Math.max(0, Math.min(hb.ancho - q.w, it.x)));
+    it.y = r(Math.max(0, Math.min(hb.largo - q.h, it.y)));
+  }
+  // Gira alrededor del centro, para que el mueble no "salte".
+  function fijarRot(it, rot) {
+    const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2;
+    it.rot = ((rot % 360) + 360) % 360;
+    const n = rectHab(it);
+    it.x = cx - n.w / 2; it.y = cy - n.h / 2;
+    clampHab(it);
+  }
+
+  /* ---- pestañas de habitaciones ---- */
+  function pintarHabTabs() {
+    $('hab-tabs').innerHTML = estado.habs.map((h, i) => `<button class="tab${i === estado.habActiva ? ' act' : ''}" data-hi="${i}">${esc(h.nombre)}</button>`).join('');
+    $('hab-nombre').value = hab().nombre;
+    $('hab-del').disabled = estado.habs.length < 2;
+    $('hab-ancho').value = hab().ancho; $('hab-largo').value = hab().largo;
+  }
+  function irAHab(i) { estado.habActiva = i; habSel = null; guardar(); pintarHab(); }
+  $('hab-tabs').addEventListener('click', ev => { const b = ev.target.closest('button[data-hi]'); if (b) irAHab(+b.dataset.hi); });
+  $('hab-nombre').addEventListener('input', ev => { const v = ev.target.value; hab().nombre = v || ('Habitación ' + (estado.habActiva + 1)); guardar(); pintarHabTabs(); $('hab-nombre').value = v; });
+  $('hab-add').addEventListener('click', () => { estado.habs.push(nuevaHab(estado.habs.length + 1)); irAHab(estado.habs.length - 1); });
+  $('hab-dup').addEventListener('click', () => {
+    const o = hab(), c = JSON.parse(JSON.stringify(o));
+    c.nombre = o.nombre + ' (opción 2)';
+    c.items.forEach(it => it.id = Date.now() + Math.random());
+    estado.habs.push(c); irAHab(estado.habs.length - 1);
+  });
+  $('hab-del').addEventListener('click', () => {
+    if (estado.habs.length < 2 || !confirm(`¿Eliminar “${hab().nombre}” con todos sus muebles?`)) return;
+    estado.habs.splice(estado.habActiva, 1);
+    irAHab(Math.min(estado.habActiva, estado.habs.length - 1));
+  });
+  ['hab-ancho', 'hab-largo'].forEach(id => $(id).addEventListener('input', () => {
+    hab().ancho = Math.max(50, parseFloat($('hab-ancho').value) || 50);
+    hab().largo = Math.max(50, parseFloat($('hab-largo').value) || 50);
+    guardar(); pintarHabCanvas(); pintarHabMedidas();
+  }));
+  ['hab-snap', 'hab-grid', 'hab-dist'].forEach(id => $(id).addEventListener('change', pintarHabCanvas));
+
+  /* ---- agregar elementos ---- */
+  $('hab-preset').innerHTML = PRESETS_HAB.map((p, i) => `<option value="${i}">${p[0]} (${p[1]} × ${p[2]})</option>`).join('');
+  function agregarItemHab(base) {
+    const hb = hab();
+    const it = Object.assign({ id: Date.now() + Math.random(), nombre: 'Mueble', tipo: 'mueble', w: 100, h: 50, x: 0, y: 0, rot: 0, color: '#d9b585' }, base);
+    if (it.tipo === 'puerta') it.h = it.w;
+    const p = posicionLibre(hb, it); it.x = p.x; it.y = p.y;
+    hb.items.push(it); habSel = it.id; guardar(); refrescarHab();
+    return it;
+  }
+  $('hab-add-preset').addEventListener('click', () => { const p = PRESETS_HAB[+$('hab-preset').value]; agregarItemHab({ nombre: p[0], w: p[1], h: p[2], color: p[3] }); });
+  $('hab-add-custom').addEventListener('click', () => {
+    const w = parseFloat($('hab-c-w').value), h = parseFloat($('hab-c-h').value);
+    if (!(w > 0 && h > 0)) { alert('Escribí el ancho y el fondo del mueble.'); return; }
+    agregarItemHab({ nombre: $('hab-c-nombre').value.trim() || 'Mueble', w, h });
+    $('hab-c-nombre').value = '';
+  });
+  $('hab-add-puerta').addEventListener('click', () => agregarItemHab({ nombre: 'Puerta', tipo: 'puerta', w: 80, h: 80, color: '#fff4cc' }));
+  $('hab-add-ventana').addEventListener('click', () => agregarItemHab({ nombre: 'Ventana', tipo: 'ventana', w: 100, h: 12, color: '#bfe6ff' }));
+  $('hab-add-alfombra').addEventListener('click', () => agregarItemHab({ nombre: 'Alfombra', tipo: 'alfombra', w: 200, h: 150, color: '#e3d3f0' }));
+  $('hab-sync-madera').addEventListener('click', () => {
+    sincronizar();
+    let nuevos = 0, actualizados = 0;
+    estado.muebles.forEach(m => {
+      const w = r(m.diseno.ancho), h = r(m.diseno.prof);
+      const it = hab().items.find(x => x.origen === m.uid);
+      if (it) { it.nombre = m.nombre; it.w = w; it.h = h; clampHab(it); actualizados++; }
+      else { agregarItemHab({ nombre: m.nombre, w, h, color: '#d9b585', origen: m.uid }); nuevos++; }
+    });
+    guardar(); refrescarHab();
+    alert(`Listo: ${nuevos} mueble(s) nuevo(s) y ${actualizados} actualizado(s). Se usó el ancho y el fondo de cada mueble.`);
+  });
+
+  /* ---- dibujo ---- */
+  function dibujarItemHab(it, n, fs, esSel, mal) {
+    const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2, w = it.w, h = it.h;
+    const stroke = mal ? '#e00000' : '#333', sw = mal ? fs * 0.3 : fs * 0.14;
+    const tr = `translate(${cx} ${cy}) rotate(${it.rot || 0}) ${it.flip ? 'scale(-1 1) ' : ''}translate(${-w / 2} ${-h / 2})`;
+    let loc;
+    if (it.tipo === 'puerta') {
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff4cc" fill-opacity=".6" stroke="${mal ? '#e00000' : '#c90'}" stroke-width="${sw}" stroke-dasharray="${fs * 0.5} ${fs * 0.3}"/>
+        <path d="M ${w} 0 A ${w} ${w} 0 0 1 0 ${w}" fill="none" stroke="#c90" stroke-width="${fs * 0.12}"/>
+        <line x1="0" y1="0" x2="0" y2="${w}" stroke="#7a5200" stroke-width="${fs * 0.45}"/>`;
+    } else if (it.tipo === 'ventana') {
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#bfe6ff'}" stroke="#3a7bc8" stroke-width="${sw}"/><line x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" stroke="#3a7bc8" stroke-width="${fs * 0.08}"/>`;
+    } else if (it.tipo === 'alfombra') {
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#e3d3f0'}" fill-opacity=".7" stroke="#8a6fa0" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}"/>`;
+    } else {
+      loc = `<rect x="0" y="0" width="${w}" height="${h}" fill="${it.color || '#d9b585'}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      if (h >= fs * 1.5) loc += `<line x1="${w * 0.15}" y1="${h - fs * 0.2}" x2="${w * 0.85}" y2="${h - fs * 0.2}" stroke="#222" stroke-width="${fs * 0.35}" stroke-linecap="round"/>`;
+    }
+    let out = `<g data-id="${it.id}" style="cursor:grab" transform="${tr}">${loc}</g>`;
+    // etiqueta (siempre derecha, sin girar)
+    if (it.tipo !== 'ventana') {
+      const fz = fs * 0.85, cw = fz * 0.55, maxW = q.w * 0.94;
+      const nombre = `${n}. ${it.nombre}`;
+      const dims = it.tipo === 'puerta' ? `${fN(it.w)} cm` : `${fN(it.w)}×${fN(it.h)}`;
+      let l1 = '';
+      if (q.h >= fz * 1.3) l1 = nombre.length * cw <= maxW ? nombre : (String(n).length * cw <= maxW ? String(n) : '');
+      const l2 = l1 && dims.length * cw <= maxW && q.h >= fz * 2.8 ? dims : '';
+      const at = `font-size="${fz}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="${fz * 0.3}" paint-order="stroke" pointer-events="none"`;
+      if (l1) out += `<text x="${cx}" y="${l2 ? cy - fz * 0.6 : cy}" ${at}>${esc(l1)}</text>`;
+      if (l2) out += `<text x="${cx}" y="${cy + fz * 0.7}" ${at} font-weight="normal">${esc(l2)}</text>`;
+    }
+    if (esSel) out += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.h}" fill="none" stroke="#e00000" stroke-width="${fs * 0.22}" stroke-dasharray="${fs * 0.6} ${fs * 0.35}" pointer-events="none"/>`;
+    return out;
+  }
+  function construirHabSvg(sel, exportar) {
+    const hb = hab(), rv = habRv;
+    const pad = Math.max(hb.ancho, hb.largo) * 0.09 + 12, fs = Math.max(hb.ancho, hb.largo) / 50;
+    const vb = [-pad, -pad, hb.ancho + 2 * pad, hb.largo + 2 * pad];
+    let g = `<rect x="0" y="0" width="${hb.ancho}" height="${hb.largo}" fill="#fff"/>`;
+    for (let x = 50; x < hb.ancho; x += 50) g += `<line x1="${x}" y1="0" x2="${x}" y2="${hb.largo}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
+    for (let y = 50; y < hb.largo; y += 50) g += `<line x1="0" y1="${y}" x2="${hb.ancho}" y2="${y}" stroke="#ececec" stroke-width="${fs * 0.06}"/>`;
+    g += `<rect x="0" y="0" width="${hb.ancho}" height="${hb.largo}" fill="none" stroke="#444" stroke-width="${fs * 0.4}"/>`;
+    g += `<text x="${hb.ancho / 2}" y="${-pad * 0.42}" text-anchor="middle" font-size="${fs}" font-weight="bold">${fN(hb.ancho)} cm</text>`;
+    g += `<text transform="translate(${-pad * 0.42},${hb.largo / 2}) rotate(-90)" text-anchor="middle" font-size="${fs}" font-weight="bold">${fN(hb.largo)} cm</text>`;
+    if (exportar) g += `<text x="0" y="${-pad * 0.78}" font-size="${fs * 1.2}" font-weight="bold">${esc(hb.nombre)}</text>`;
+    const orden = { alfombra: 0, ventana: 1, mueble: 2, puerta: 3 };
+    hb.items.map((it, i) => ({ it, n: i + 1 })).sort((a, b) => orden[a.it.tipo] - orden[b.it.tipo])
+      .forEach(({ it, n }) => { g += dibujarItemHab(it, n, fs, it.id === sel, !!(rv && rv.ids.has(it.id))); });
+    const it = sel != null ? habIt(sel) : null;
+    if (it && !exportar && $('hab-dist').checked) {
+      const q = rectHab(it), cx = q.x + q.w / 2, cy = q.y + q.h / 2, fz = fs * 0.8;
+      const L = q.x, R = hb.ancho - q.x2, T = q.y, B = hb.largo - q.y2;
+      const seg = (x1, y1, x2, y2, v, tx, ty) => v < 0.5 ? '' :
+        `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#0a7" stroke-width="${fs * 0.12}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}"/>` +
+        `<text x="${tx}" y="${ty}" font-size="${fz}" font-weight="bold" fill="#066" text-anchor="middle" stroke="#fff" stroke-width="${fz * 0.3}" paint-order="stroke" pointer-events="none">${fN(v)}</text>`;
+      g += seg(0, cy, q.x, cy, L, q.x / 2, cy - fz * 0.4) + seg(q.x2, cy, hb.ancho, cy, R, (q.x2 + hb.ancho) / 2, cy - fz * 0.4)
+        + seg(cx, 0, cx, q.y, T, cx + fz * 0.9, q.y / 2) + seg(cx, q.y2, cx, hb.largo, B, cx + fz * 0.9, (q.y2 + hb.largo) / 2);
+    }
+    if (!exportar) habGuias.forEach(gd => {
+      g += gd.eje === 'x'
+        ? `<line x1="${gd.pos}" y1="0" x2="${gd.pos}" y2="${hb.largo}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`
+        : `<line x1="0" y1="${gd.pos}" x2="${hb.ancho}" y2="${gd.pos}" stroke="#d0d" stroke-width="${fs * 0.1}" stroke-dasharray="${fs * 0.4} ${fs * 0.3}" pointer-events="none"/>`;
+    });
+    return { vb, inner: g };
+  }
+  function pintarHabCanvas() {
+    habRv = revisarHabitacion(hab());
+    const sv = construirHabSvg(habSel, false);
+    $('hab-canvas').setAttribute('viewBox', sv.vb.join(' '));
+    $('hab-canvas').innerHTML = sv.inner;
+    document.querySelectorAll('#hab-tabla tbody tr').forEach(tr => tr.classList.toggle('sel', Number(tr.dataset.rid) === habSel));
+    pintarHabRevision();
+  }
+  function pintarHabRevision() {
+    const rv = habRv, hb = hab();
+    const nMue = hb.items.filter(i => i.tipo === 'mueble').length;
+    $('hab-resumen').innerHTML = `<b>${fN(hb.ancho / 100)} × ${fN(hb.largo / 100)} m</b> = ${fN(rv.areaHab)} m² · ${nMue} mueble(s) ocupan ${fN(rv.areaMuebles)} m² (${Math.round(rv.pct)}% del piso)`;
+    $('hab-rev').innerHTML = rv.problemas.length
+      ? rv.problemas.map(p => `<div class="aviso${p.nivel === 'aviso' ? ' warn' : ''}">${p.nivel === 'error' ? '⚠' : 'ℹ'} ${esc(p.texto)} <span class="no-print">${p.ids.slice(0, 2).map(id => `<button data-hver="${id}">Ver</button>`).join(' ')}</span></div>`).join('')
+      : '<div class="ok-box">✔ Todo cabe: nada se sale de la habitación ni se monta con otro mueble ni con el giro de una puerta.</div>';
+  }
+  $('hab-rev').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-hver]'); if (!b) return;
+    habSel = Number(b.dataset.hver); pintarHabCanvas();
+  });
+
+  /* ---- tablas ---- */
+  function pintarHabTabla() {
+    const num_ = (i, k, v, extra = '') => `<input type="number" step="1" ${extra} data-hr="${i}" data-k="${k}" value="${v}">`;
+    $('hab-tabla').tBodies[0].innerHTML = hab().items.map((it, i) => `<tr data-rid="${it.id}"${it.id === habSel ? ' class="sel"' : ''}>
+      <td>${i + 1}</td>
+      <td><input type="color" data-hr="${i}" data-k="color" value="${/^#[0-9a-f]{6}$/i.test(it.color || '') ? it.color : '#d9b585'}"></td>
+      <td><input data-hr="${i}" data-k="nombre" value="${esc(it.nombre)}"></td>
+      <td class="tt">${TIPO_TXT[it.tipo] || it.tipo}</td>
+      <td>${num_(i, 'w', it.w, 'min="1"')}</td>
+      <td>${it.tipo === 'puerta' ? '—' : num_(i, 'h', it.h, 'min="1"')}</td>
+      <td><select data-hr="${i}" data-k="rot">${[0, 90, 180, 270].map(g => `<option value="${g}"${(it.rot || 0) === g ? ' selected' : ''}>${g}°</option>`).join('')}</select></td>
+      <td>${num_(i, 'x', it.x)}</td><td>${num_(i, 'y', it.y)}</td>
+      <td><button data-hrot="${i}" title="Girar 90°">↻</button><button data-hdup="${i}" title="Duplicar">⧉</button><button class="danger" data-hdel="${i}" title="Eliminar">🗑</button></td></tr>`).join('');
+  }
+  function pintarHabMedidas() {
+    const hb = hab();
+    $('hab-medidas').tBodies[0].innerHTML = hb.items.map((it, i) => {
+      const q = rectHab(it);
+      return `<tr><td>${i + 1}</td><td>${esc(it.nombre)} <small>(${TIPO_TXT[it.tipo]})</small></td><td>${fN(it.w)} × ${fN(it.h)}</td><td>${it.rot || 0}°</td>
+        <td><b>${fN(q.x)}</b></td><td><b>${fN(q.y)}</b></td><td><b>${fN(hb.ancho - q.x2)}</b></td><td><b>${fN(hb.largo - q.y2)}</b></td></tr>`;
+    }).join('') || '<tr><td colspan="8" class="hint">Todavía no hay muebles en la habitación.</td></tr>';
+  }
+  function actualizarFilaXY(it) {
+    const i = hab().items.indexOf(it);
+    ['x', 'y'].forEach(k => { const inp = document.querySelector(`#hab-tabla input[data-hr="${i}"][data-k="${k}"]`); if (inp) inp.value = it[k]; });
+  }
+  $('hab-tabla').addEventListener('input', ev => {
+    const t = ev.target, i = t.dataset.hr; if (i === undefined) return;
+    const it = hab().items[+i], k = t.dataset.k;
+    if (k === 'nombre') it.nombre = t.value;
+    else if (k === 'color') it.color = t.value;
+    else if (k === 'rot') fijarRot(it, +t.value);
+    else { it[k] = parseFloat(t.value) || 0; if (it.tipo === 'puerta' && k === 'w') it.h = it.w; }
+    if (k !== 'nombre' && k !== 'color' && k !== 'rot') clampHab(it);
+    habSel = it.id; guardar(); pintarHabCanvas(); pintarHabMedidas();
+  });
+  $('hab-tabla').addEventListener('change', ev => { if (ev.target.dataset.hr !== undefined) pintarHabTabla(); pintarHabCanvas(); });
+  $('hab-tabla').addEventListener('focusin', ev => {
+    const i = ev.target.dataset && ev.target.dataset.hr; if (i === undefined) return;
+    const it = hab().items[+i]; if (it && it.id !== habSel) { habSel = it.id; pintarHabCanvas(); }
+  });
+  $('hab-tabla').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const hb = hab();
+    if (b.dataset.hrot !== undefined) { const it = hb.items[+b.dataset.hrot]; fijarRot(it, (it.rot || 0) + 90); habSel = it.id; }
+    else if (b.dataset.hdup !== undefined) duplicarHab(hb.items[+b.dataset.hdup]);
+    else if (b.dataset.hdel !== undefined) { const it = hb.items[+b.dataset.hdel]; hb.items.splice(+b.dataset.hdel, 1); if (habSel === it.id) habSel = null; }
+    else return;
+    guardar(); refrescarHab();
+  });
+  function duplicarHab(it) {
+    const c = Object.assign({}, it, { id: Date.now() + Math.random(), x: it.x + 10, y: it.y + 10 });
+    delete c.origen; clampHab(c); hab().items.push(c); habSel = c.id;
+  }
+
+  /* ---- barra de acciones sobre el mueble seleccionado ---- */
+  $('hab-barra').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-act]'); if (!b) return;
+    const it = habSel != null ? habIt(habSel) : null;
+    if (!it) { alert('Tocá primero un mueble en el plano (o en la lista) para seleccionarlo.'); return; }
+    const hb = hab(), q = rectHab(it);
+    switch (b.dataset.act) {
+      case 'rotd': fijarRot(it, (it.rot || 0) + 90); break;
+      case 'rotl': fijarRot(it, (it.rot || 0) - 90); break;
+      case 'flip': if (it.tipo === 'puerta') it.flip = !it.flip; else alert('Voltear sirve para puertas (cambia el lado de la bisagra). Para un mueble usá Girar.'); break;
+      case 'izq': it.x = 0; break;
+      case 'der': it.x = hb.ancho - q.w; break;
+      case 'arr': it.y = 0; break;
+      case 'aba': it.y = hb.largo - q.h; break;
+      case 'ch': it.x = (hb.ancho - q.w) / 2; break;
+      case 'cv': it.y = (hb.largo - q.h) / 2; break;
+      case 'dup': duplicarHab(it); break;
+      case 'del': hb.items.splice(hb.items.indexOf(it), 1); habSel = null; break;
+    }
+    if (it && hb.items.includes(it)) clampHab(it);
+    guardar(); refrescarHab();
+  });
+  document.addEventListener('keydown', ev => {
+    if (vistaActual !== 'hab' || habSel == null || /INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)) return;
+    const it = habIt(habSel); if (!it) return;
+    const p = ev.shiftKey ? 10 : 1;
+    if (ev.key === 'r' || ev.key === 'R') fijarRot(it, (it.rot || 0) + 90);
+    else if (ev.key === 'Delete' || ev.key === 'Backspace') { hab().items.splice(hab().items.indexOf(it), 1); habSel = null; }
+    else if (ev.key === 'ArrowLeft') { it.x -= p; clampHab(it); }
+    else if (ev.key === 'ArrowRight') { it.x += p; clampHab(it); }
+    else if (ev.key === 'ArrowUp') { it.y -= p; clampHab(it); }
+    else if (ev.key === 'ArrowDown') { it.y += p; clampHab(it); }
+    else return;
+    ev.preventDefault(); guardar(); refrescarHab();
+  });
+
+  /* ---- arrastrar en el plano ---- */
+  function ptHab(ev) {
+    const cv = $('hab-canvas'), pt = cv.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    return pt.matrixTransform(cv.getScreenCTM().inverse());
+  }
+  $('hab-canvas').addEventListener('pointerdown', ev => {
+    const g = ev.target.closest('[data-id]');
+    if (!g) { habSel = null; habGuias = []; pintarHabCanvas(); return; }
+    const it = habIt(Number(g.dataset.id)); if (!it) return;
+    habSel = it.id;
+    const p = ptHab(ev);
+    habDrag = { it, dx: p.x - it.x, dy: p.y - it.y };
+    $('hab-canvas').setPointerCapture(ev.pointerId);
+    pintarHabCanvas();
+  });
+  $('hab-canvas').addEventListener('pointermove', ev => {
+    if (!habDrag) return;
+    const p = ptHab(ev), it = habDrag.it;
+    const s2 = snapMove(it, p.x - habDrag.dx, p.y - habDrag.dy, hab(), opcionesHab());
+    it.x = s2.x; it.y = s2.y; habGuias = s2.guias;
+    pintarHabCanvas(); actualizarFilaXY(it); pintarHabMedidas();
+  });
+  const finHabDrag = () => { if (!habDrag) return; habDrag = null; habGuias = []; guardar(); pintarHabCanvas(); };
+  $('hab-canvas').addEventListener('pointerup', finHabDrag);
+  $('hab-canvas').addEventListener('pointercancel', finHabDrag);
+
+  /* ---- exportar ---- */
+  $('hab-png').addEventListener('click', () => {
+    const sv = construirHabSvg(null, true), vb = sv.vb, W = 1100, H = Math.round(W * vb[3] / vb[2]);
+    const src = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${vb.join(' ')}" font-family="Arial, sans-serif"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="#fff"/>${sv.inner}</svg>`;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2;
+      const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(bl => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(bl);
+        a.download = 'habitacion-' + hab().nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_') + '.png'; a.click();
+      });
+    };
+    img.onerror = () => alert('No se pudo crear la imagen. Usá “Imprimir / guardar PDF”.');
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+  });
+  $('hab-print').addEventListener('click', () => {
+    habSel = null; pintarHabCanvas();
+    document.body.classList.add('print-hab');
+    const quitar = () => { document.body.classList.remove('print-hab'); window.removeEventListener('afterprint', quitar); };
+    window.addEventListener('afterprint', quitar);
+    window.print();
+  });
+
+  function refrescarHab() { pintarHabTabla(); pintarHabCanvas(); pintarHabMedidas(); }
+  function pintarHab() { pintarHabTabs(); refrescarHab(); }
+
   /* ---- Secciones contraíbles ---- */
   const CLAVE_UI = 'calcMuebles_ui';
   function cargarUI() { try { return JSON.parse(localStorage.getItem(CLAVE_UI)) || {}; } catch (e) { return {}; } }
   function guardarUI(u) { localStorage.setItem(CLAVE_UI, JSON.stringify(u)); }
-  function seccionesCard() { return [...document.querySelectorAll('main > section.card')].filter(sec => sec.querySelector(':scope > h2')); }
+  function seccionesCard() { return [...document.querySelectorAll('main.vista > section.card')].filter(sec => sec.querySelector(':scope > h2')); }
   function aplicarColapso(sec, colapsar) {
     sec.classList.toggle('colapsada', colapsar);
     const h = sec.querySelector(':scope > h2');
@@ -1375,9 +1806,11 @@ if (typeof document !== 'undefined') {
     $('plano-modo').value = estado.planoModo || 'activo';
     $('rev-modo').value = estado.revModo || 'activo';
     refrescarVistas();
+    if (vistaActual === 'hab') pintarHab();
   }
   iniciar();
   iniciarColapsables();
+  mostrarVista(cargarUI().vista === 'hab' ? 'hab' : 'cortes');
 }
 
-if (typeof module !== 'undefined') module.exports = { revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { PRESETS_HAB, nuevaHab, rectHab, revisarHabitacion, posicionLibre, snapMove, revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

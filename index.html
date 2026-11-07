@@ -12,7 +12,12 @@
   <p>Diseñá tu mueble, indicá las tablas que venden y la app calcula cuántas comprar y cómo cortarlas.</p>
 </header>
 
-<main>
+<nav id="nav-vistas" class="nav-vistas no-print">
+  <button data-vista="cortes" class="act">🪵 Cortes de madera</button>
+  <button data-vista="hab">🏠 Habitación</button>
+</nav>
+
+<main id="vista-cortes" class="vista">
   <section class="card">
     <h2>📝 Lo que necesito</h2>
     <p class="hint">Escribí acá la descripción del mueble, medidas, ideas o pendientes. Se guarda solo y sale en la impresión.</p>
@@ -152,6 +157,98 @@
     <input type="file" id="file-import" accept="application/json" hidden>
   </section>
 </main>
+
+<main id="vista-hab" class="vista" hidden>
+  <section class="card" id="hab-sec-dim">
+    <h2>🏠 Habitación</h2>
+    <p class="hint">Poné las medidas del cuarto (por dentro, de pared a pared) y acomodá los muebles vistos desde arriba. Podés tener varias distribuciones para comparar (“opción 2”). Todo en centímetros.</p>
+    <div class="muebles-bar">
+      <div id="hab-tabs" class="hab-tabs"></div>
+      <div class="row">
+        <label>Nombre<input id="hab-nombre" type="text"></label>
+        <button id="hab-add" class="primary">+ Nueva habitación</button>
+        <button id="hab-dup">⧉ Duplicar (otra opción)</button>
+        <button id="hab-del" class="danger">🗑 Eliminar</button>
+      </div>
+    </div>
+    <div class="row">
+      <label>Ancho de la habitación (cm)<input type="number" id="hab-ancho" min="50" step="1"></label>
+      <label>Largo / fondo (cm)<input type="number" id="hab-largo" min="50" step="1"></label>
+      <label class="check"><input type="checkbox" id="hab-snap" checked> Ajustar a paredes y otros muebles</label>
+      <label>Cuadrícula (cm)<select id="hab-grid"><option value="0">Sin cuadrícula</option><option value="1">1</option><option value="5" selected>5</option><option value="10">10</option></select></label>
+      <label class="check"><input type="checkbox" id="hab-dist" checked> Mostrar distancias a las paredes</label>
+    </div>
+    <div id="hab-resumen" class="hint"></div>
+  </section>
+
+  <section class="card" id="hab-sec-add">
+    <h2>🛋 Agregar muebles</h2>
+    <div class="row">
+      <label>Mueble de la lista<select id="hab-preset"></select></label>
+      <button id="hab-add-preset" class="primary">+ Agregar</button>
+    </div>
+    <div class="row">
+      <label>Otro mueble: nombre<input id="hab-c-nombre" type="text" placeholder="Ej: Perchero"></label>
+      <label>Ancho (cm)<input id="hab-c-w" type="number" min="1" value="100"></label>
+      <label>Fondo (cm)<input id="hab-c-h" type="number" min="1" value="50"></label>
+      <button id="hab-add-custom" class="primary">+ Agregar con mis medidas</button>
+    </div>
+    <div>
+      <button id="hab-add-puerta">🚪 Puerta</button>
+      <button id="hab-add-ventana">🪟 Ventana</button>
+      <button id="hab-add-alfombra">▭ Alfombra</button>
+      <button id="hab-sync-madera">🪵 Traer mis muebles de madera</button>
+    </div>
+    <p class="hint">“Traer mis muebles de madera” agrega cada mueble de la pestaña de cortes (con su ancho y fondo) y, si ya lo trajiste, actualiza sus medidas sin mover su lugar.</p>
+  </section>
+
+  <section class="card" id="hab-plano-sec">
+    <h2>📐 Plano de la habitación</h2>
+    <p class="hint">Arrastrá los muebles. La raya negra gruesa en un lado marca el <b>frente</b> del mueble. Con un mueble seleccionado: <b>R</b> lo gira, <b>Supr</b> lo borra y las <b>flechas</b> lo mueven 1 cm (con Mayús, 10 cm).</p>
+    <div id="hab-barra" class="no-print">
+      <button data-act="rotd" title="Girar 90° a la derecha (R)">↻ Girar</button>
+      <button data-act="rotl" title="Girar 90° a la izquierda">↺ Girar</button>
+      <button data-act="flip" title="Voltear el lado de la bisagra (solo puertas)">⇄ Voltear puerta</button>
+      <button data-act="izq">⇤ Pared izq.</button>
+      <button data-act="der">⇥ Pared der.</button>
+      <button data-act="arr">⤒ Pared arriba</button>
+      <button data-act="aba">⤓ Pared abajo</button>
+      <button data-act="ch">↔ Centrar horiz.</button>
+      <button data-act="cv">↕ Centrar vert.</button>
+      <button data-act="dup">⧉ Duplicar</button>
+      <button data-act="del" class="danger">🗑 Borrar</button>
+    </div>
+    <svg id="hab-canvas" class="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="hab-rev"></div>
+    <div class="no-print">
+      <button id="hab-png">⬇ Descargar imagen (PNG)</button>
+      <button id="hab-print" class="primary">🖨 Imprimir / guardar PDF</button>
+    </div>
+  </section>
+
+  <section class="card" id="hab-sec-lista">
+    <h2>✏️ Muebles de la habitación (editar medidas)</h2>
+    <p class="hint">X e Y son la distancia desde la esquina superior izquierda de la habitación hasta la esquina superior izquierda del mueble (ya girado). “Giro” gira el mueble alrededor de su centro.</p>
+    <div class="table-wrap">
+      <table id="hab-tabla">
+        <thead><tr><th>#</th><th>Color</th><th>Nombre</th><th>Tipo</th><th>Ancho</th><th>Fondo</th><th>Giro</th><th>X</th><th>Y</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="hab-sec-med">
+    <h2>📏 Medidas para colocar</h2>
+    <p class="hint">Distancias exactas desde cada pared hasta el mueble (en cm). Útil para marcar el piso al acomodar.</p>
+    <div class="table-wrap">
+      <table id="hab-medidas" class="cortes">
+        <thead><tr><th>#</th><th>Mueble</th><th>Tamaño (ancho × fondo)</th><th>Giro</th><th>Pared izquierda</th><th>Pared de arriba</th><th>Pared derecha</th><th>Pared de abajo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
 <script src="app.js"></script>
 </body>
 </html>

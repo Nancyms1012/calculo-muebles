@@ -94,3 +94,23 @@ h2.toggle:hover{color:#4a2d15}
 .barra-secciones{display:flex;gap:8px;flex-wrap:wrap}
 .barra-secciones button{margin:0;font-size:.85rem;padding:6px 10px}
 @media print{.card.colapsada > .card-body{display:block!important}}
+
+main[hidden]{display:none}
+.nav-vistas{display:flex;gap:6px;justify-content:center;background:#573619;padding:8px 8px 0}
+.nav-vistas button{margin:0;border-radius:8px 8px 0 0;border:none;background:#8a5a33;color:#fff;padding:10px 18px;font-size:1rem}
+.nav-vistas button.act{background:#f4efe8;color:#6b4423;font-weight:bold}
+.hab-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.hab-tabs .tab{margin:0}
+.hab-tabs .tab.act{background:#6b4423;color:#fff}
+#hab-barra{margin:6px 0}
+#hab-barra button{padding:6px 10px;font-size:.85rem}
+#hab-canvas{max-height:75vh}
+#hab-tabla td input[type=color]{min-width:34px;width:34px;padding:0;height:30px}
+#hab-tabla td input{min-width:60px}
+#hab-tabla td:nth-child(3) input{min-width:130px}
+#hab-tabla td.tt{font-size:.8rem;color:#6d5f52}
+#hab-tabla tr.sel{background:#fbeede}
+#hab-medidas td,#hab-medidas th{white-space:nowrap}
+body.print-hab .card:not(#hab-plano-sec):not(#hab-sec-med){display:none!important}
+body.print-hab #hab-plano-sec,body.print-hab #hab-sec-med{display:block!important}
+body.print-hab #hab-sec-med{break-before:page}
