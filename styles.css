@@ -73,3 +73,8 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .tabw .tab{border:none;background:transparent;padding:6px 8px;margin:0}
 .tabw .tab.act{background:#6b4423;color:#fff;border-radius:6px}
 .tabw.off{opacity:.55;border-style:dashed}
+#plano-out svg{display:block;margin:10px 0}
+.plano-mueble{margin-bottom:24px}
+body.print-plano .card:not(#plano-sec){display:none!important}
+body.print-plano #plano-sec{display:block!important}
+body.print-plano .plano-mueble{break-after:page;page-break-after:always}

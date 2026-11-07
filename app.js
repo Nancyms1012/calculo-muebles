@@ -327,6 +327,146 @@ function dibujoCaja(v, repisas, puertas) {
   return s;
 }
 
+/* ====== PLANO DE ARMADO ====== */
+function fN(n) { return (Math.round(n * 10) / 10).toString().replace('.', ','); }
+function escH(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// Convierte un diseño en medidas de armado. Coordenadas del diseño: x desde la izquierda, y desde ARRIBA.
+function calcularPlano(d) {
+  const A = +d.ancho, Hh = +d.alto;
+  const el = d.el.map(e => {
+    const horiz = e.orient !== 'V';
+    const w = horiz ? +e.largo : +e.esp, h = horiz ? +e.esp : +e.largo;
+    return Object.assign({}, e, { w, h, x2: e.x + w, y2: e.y + h });
+  });
+  const hs = el.filter(e => e.orient !== 'V' && !e.tubo).sort((a, b) => a.y - b.y || a.x - b.x);
+  const vs = el.filter(e => e.orient === 'V').sort((a, b) => a.x - b.x || a.y - b.y);
+  const ts = el.filter(e => e.tubo).sort((a, b) => a.y - b.y);
+  const orden = hs.concat(vs, ts);
+  orden.forEach((e, i) => { e.n = i + 1; });
+
+  // Espacio libre (alto) entre una tabla horizontal y la siguiente que tiene debajo
+  const luces = [];
+  for (const a of hs) {
+    let sig = null;
+    for (const b of hs) {
+      if (b === a || b.y < a.y2 - 0.01) continue;
+      if (Math.min(a.x2, b.x2) - Math.max(a.x, b.x) <= 0.01) continue;
+      if (!sig || b.y < sig.y) sig = b;
+    }
+    if (sig && sig.y - a.y2 > 0.05) luces.push({ y1: a.y2, y2: sig.y, luz: r(sig.y - a.y2), de: a, a: sig });
+  }
+  // Espacio libre (ancho) entre tablas verticales
+  const anchosLibres = [];
+  for (let i = 0; i < vs.length - 1; i++) {
+    const a = vs[i], b = vs[i + 1];
+    if (Math.min(a.y2, b.y2) - Math.max(a.y, b.y) > 0.01 && b.x - a.x2 > 0.05)
+      anchosLibres.push({ luz: r(b.x - a.x2), de: a, a: b });
+  }
+  // Piezas que se superponen (no calzarían al armar)
+  const choques = [];
+  const duras = el.filter(e => !e.tubo);
+  for (let i = 0; i < duras.length; i++) for (let j = i + 1; j < duras.length; j++) {
+    const a = duras[i], b = duras[j];
+    const ox = Math.min(a.x2, b.x2) - Math.max(a.x, b.x), oy = Math.min(a.y2, b.y2) - Math.max(a.y, b.y);
+    if (ox > 0.05 && oy > 0.05) choques.push({ a, b, ox: r(ox), oy: r(oy) });
+  }
+
+  const filas = orden.map(e => {
+    let medidas, pos;
+    if (e.tubo) {
+      const cy = e.y + e.h / 2;
+      medidas = `${fN(e.largo)} cm de largo · Ø ${fN(e.esp)}`;
+      pos = `Centro del tubo a ${fN(Hh - cy)} cm del piso. Desde la izquierda: ${fN(e.x)} cm (hasta ${fN(e.x2)} cm).`;
+    } else if (e.orient === 'V') {
+      medidas = `${fN(e.largo)} × ${fN(e.prof)} × ${fN(e.esp)}`;
+      pos = `Borde izquierdo a ${fN(e.x)} cm del lado izquierdo (borde derecho a ${fN(e.x2)} cm; ${fN(A - e.x2)} cm del lado derecho). Va desde ${fN(Hh - e.y2)} hasta ${fN(Hh - e.y)} cm de altura.`;
+    } else {
+      medidas = `${fN(e.largo)} × ${fN(e.prof)} × ${fN(e.esp)}`;
+      pos = `Cara superior a ${fN(Hh - e.y)} cm del piso (cara inferior a ${fN(Hh - e.y2)} cm). Desde la izquierda: ${fN(e.x)} cm (hasta ${fN(e.x2)} cm; ${fN(A - e.x2)} cm del lado derecho).`;
+    }
+    return { n: e.n, nombre: e.nombre, medidas, pos, tubo: !!e.tubo };
+  });
+  return { A, Hh, prof: +d.prof, el: orden, hs, vs, ts, luces, anchosLibres, choques, filas };
+}
+
+// Dibujo SVG autónomo (estilos en línea, para poder exportarlo a PNG).
+function svgPlano(pl, colorFn, titulo) {
+  const { A, Hh, el, hs, vs, ts, luces } = pl;
+  const s = Math.min(520 / A, 480 / Hh);
+  const W = A * s, H = Hh * s;
+  const carriles = [];
+  luces.slice().sort((a, b) => a.y1 - b.y1).forEach(l => {
+    let c = carriles.findIndex(fin => fin <= l.y1 + 0.01);
+    if (c < 0) { c = carriles.length; carriles.push(0); }
+    carriles[c] = l.y2; l.carril = c;
+  });
+  const ML = 110, MT = 76, MR = 40 + Math.max(1, carriles.length) * 18, MB = 78;
+  const ox = ML, oy = MT, X = x => ox + x * s, Y = y => oy + y * s;
+  const tw = Math.max(Math.round(ML + W + MR), 480), th = Math.round(MT + H + MB);
+  const F = 'font-family="Arial, sans-serif"';
+  let g = `<rect x="0" y="0" width="${tw}" height="${th}" fill="#fff"/>`;
+  g += `<text x="12" y="20" font-size="14" font-weight="bold" ${F}>${escH(titulo)}</text>`;
+  g += `<text x="12" y="36" font-size="10" fill="#555" ${F}>Medidas en cm. Alturas desde el piso hasta la cara superior de cada tabla.</text>`;
+
+  // ancho total (arriba)
+  const ya = oy - 14;
+  g += `<line x1="${X(0)}" y1="${ya}" x2="${X(A)}" y2="${ya}" stroke="#222"/><line x1="${X(0)}" y1="${ya - 4}" x2="${X(0)}" y2="${ya + 4}" stroke="#222"/><line x1="${X(A)}" y1="${ya - 4}" x2="${X(A)}" y2="${ya + 4}" stroke="#222"/>`;
+  g += `<text x="${X(A / 2)}" y="${ya - 7}" text-anchor="middle" font-size="11" font-weight="bold" ${F}>ancho ${fN(A)} cm · fondo ${fN(pl.prof)} cm</text>`;
+
+  // recuadro del mueble
+  g += `<rect x="${X(0)}" y="${Y(0)}" width="${W}" height="${H}" fill="#fff" stroke="#999" stroke-dasharray="4 3"/>`;
+
+  // marcas de altura (izquierda)
+  const marcas = [];
+  hs.forEach(h => marcas.push({ y: h.y, t: fN(Hh - h.y) }));
+  ts.forEach(t => { const cy = t.y + t.h / 2; marcas.push({ y: cy, t: 'Ø ' + fN(Hh - cy), tubo: true }); });
+  marcas.sort((a, b) => a.y - b.y);
+  const uniq = marcas.filter((m, i, arr) => i === 0 || !(Math.abs(m.y - arr[i - 1].y) < 0.01 && m.t === arr[i - 1].t));
+  uniq.push({ y: Hh, t: 'piso = 0', piso: true });
+  let ultimo = -1e9;
+  uniq.forEach(m => { m.py = Y(m.y); m.ly = Math.max(m.py, ultimo + 13); ultimo = m.ly; });
+  uniq.forEach(m => {
+    if (!m.piso) g += `<line x1="${ox - 8}" y1="${m.py}" x2="${ox + W}" y2="${m.py}" stroke="${m.tubo ? '#4a6' : '#bbb'}" stroke-dasharray="2 3"/>`;
+    g += `<line x1="${ox - 8}" y1="${m.py}" x2="${ox - 14}" y2="${m.ly}" stroke="#222"/>`;
+    g += `<text x="${ox - 17}" y="${m.ly + 4}" text-anchor="end" font-size="11" font-weight="bold" ${m.tubo ? 'fill="#2a6a3a"' : ''} ${F}>${escH(m.t)}</text>`;
+  });
+  g += `<text transform="translate(14,${oy + H / 2}) rotate(-90)" text-anchor="middle" font-size="10" fill="#555" ${F}>ALTURA DESDE EL PISO (cm)</text>`;
+  g += `<line x1="${ox - 10}" y1="${Y(Hh)}" x2="${ox + W + 10}" y2="${Y(Hh)}" stroke="#222" stroke-width="2.5"/>`;
+
+  // piezas
+  el.forEach(e => {
+    const px = X(e.x), py = Y(e.y), pw = e.w * s, ph = e.h * s;
+    g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" ${e.tubo ? `rx="${Math.min(pw, ph) / 2}"` : ''} fill="${colorFn(e.nombre)}" stroke="#222" stroke-width="1"/>`;
+    const vert = ph > pw, largoPx = Math.max(pw, ph);
+    const full = `${e.n}. ${e.nombre}`;
+    const txt = full.length * 5.6 <= largoPx - 6 ? full : String(e.n);
+    const attrs = `font-size="10" font-weight="bold" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="2.5" paint-order="stroke" ${F}`;
+    const cx = px + pw / 2, cy = py + ph / 2;
+    g += vert ? `<text transform="translate(${cx},${cy}) rotate(-90)" ${attrs}>${escH(txt)}</text>` : `<text x="${cx}" y="${cy}" ${attrs}>${escH(txt)}</text>`;
+  });
+
+  // espacios libres verticales (derecha)
+  luces.forEach(l => {
+    const x = ox + W + 16 + l.carril * 18, y1 = Y(l.y1), y2 = Y(l.y2);
+    g += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#b00"/><line x1="${x - 4}" y1="${y1}" x2="${x + 4}" y2="${y1}" stroke="#b00"/><line x1="${x - 4}" y1="${y2}" x2="${x + 4}" y2="${y2}" stroke="#b00"/>`;
+    if (y2 - y1 >= 30) g += `<text transform="translate(${x - 4},${(y1 + y2) / 2}) rotate(-90)" text-anchor="middle" font-size="10" fill="#b00" ${F}>libre ${fN(l.luz)}</text>`;
+  });
+
+  // medidas horizontales (abajo)
+  const yb = Y(Hh) + 28;
+  const pts = [...new Set([0, r(A)].concat(vs.flatMap(v => [r(v.x), r(v.x2)])))].sort((a, b) => a - b);
+  g += `<line x1="${X(0)}" y1="${yb}" x2="${X(A)}" y2="${yb}" stroke="#222"/>`;
+  pts.forEach(p => { g += `<line x1="${X(p)}" y1="${yb - 4}" x2="${X(p)}" y2="${yb + 4}" stroke="#222"/>`; });
+  for (let i = 0; i < pts.length - 1; i++) {
+    const seg = pts[i + 1] - pts[i];
+    if (seg * s >= 26) g += `<text x="${X(pts[i] + seg / 2)}" y="${yb + 16}" text-anchor="middle" font-size="11" font-weight="bold" ${F}>${fN(seg)}</text>`;
+  }
+  g += `<text x="${X(A / 2)}" y="${yb + 32}" text-anchor="middle" font-size="10" fill="#555" ${F}>DISTANCIAS HORIZONTALES (cm), de izquierda a derecha</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tw} ${th}" data-w="${tw}" data-h="${th}" style="width:100%;max-width:${tw}px;height:auto;background:#fff;border:1px solid #ccc">${g}</svg>`;
+}
+
 /* ====== INTERFAZ ====== */
 if (typeof document !== 'undefined') {
   const CLAVE = 'calcMuebles_v1';
@@ -712,8 +852,8 @@ if (typeof document !== 'undefined') {
     const base = { id: Date.now() + Math.random(), tipo, esp: e, prof: d.prof };
     const interior = Math.max(1, r(d.ancho - 2 * e));
     const defs = {
-      techo:    { nombre: 'Techo / superior', orient: 'H', largo: d.ancho, x: 0, y: 0 },
-      piso:     { nombre: 'Piso / inferior', orient: 'H', largo: d.ancho, x: 0, y: d.alto - e },
+      techo:    { nombre: 'Techo / superior', orient: 'H', largo: interior, x: e, y: 0 },
+      piso:     { nombre: 'Piso / inferior', orient: 'H', largo: interior, x: e, y: d.alto - e },
       costado:  { nombre: 'Costado', orient: 'V', largo: d.alto, x: n % 2 === 0 ? 0 : d.ancho - e, y: 0 },
       division: { nombre: 'División', orient: 'V', largo: Math.max(1, r(d.alto - 2 * e)), x: r(d.ancho / 2 - e / 2), y: e },
       repisa:   { nombre: 'Repisa', orient: 'H', largo: interior, x: e, y: Math.min(d.alto - 2 * e, r(d.alto * (n + 1) / 5)) },
@@ -818,6 +958,65 @@ if (typeof document !== 'undefined') {
   $('d-canvas').addEventListener('pointerup', finArrastre);
   $('d-canvas').addEventListener('pointercancel', finArrastre);
 
+  /* ---- Plano de armado ---- */
+  function generarPlano() {
+    sincronizar();
+    const idx = incluidos();
+    if (!idx.length) { alert('Marcá con ✔ al menos un mueble para generar su plano.'); return; }
+    $('plano-out').innerHTML = '<div class="no-print" style="margin:8px 0"><button class="primary" data-pl="print">🖨 Imprimir / guardar PDF</button></div>' + idx.map(i => {
+      const mu = estado.muebles[i], d = mu.diseno;
+      if (!d.el.length) return `<div class="plano-mueble"><h3>${esc(mu.nombre)}</h3><p class="hint">Este mueble no tiene piezas en el diseño. Agregalas en el Diseñador.</p></div>`;
+      const pl = calcularPlano(d);
+      const tit = `${mu.nombre} — ${fN(pl.A)} × ${fN(pl.Hh)} × ${fN(pl.prof)} cm (ancho × alto × fondo)`;
+      const nom = e => `“${esc(e.nombre)}” (${e.n})`;
+      const avisos = pl.choques.map(c => `<div class="aviso">⚠ ${nom(c.a)} y ${nom(c.b)} se superponen ${fN(c.ox)} × ${fN(c.oy)} cm: así no van a calzar. Una de las dos debe acortarse o moverse. Recordá: el techo, el piso y las repisas van <b>entre</b> los costados y las divisiones (largo = espacio libre). Si una repisa cruza una división, hacela en <b>dos piezas</b> (una a cada lado).</div>`).join('');
+      const libres = pl.luces.map(l => `<li>Entre ${nom(l.de)} y ${nom(l.a)}: <b>${fN(l.luz)} cm</b> de alto libre</li>`)
+        .concat(pl.anchosLibres.map(l => `<li>Entre ${nom(l.de)} y ${nom(l.a)}: <b>${fN(l.luz)} cm</b> de ancho libre</li>`)).join('');
+      return `<div class="plano-mueble">
+        <h3>${esc(mu.nombre)}</h3>
+        ${avisos}
+        ${svgPlano(pl, colorDe, tit).replace('<svg ', `<svg data-mi="${i}" `)}
+        <div class="no-print"><button data-pl="png" data-mi="${i}">⬇ Descargar imagen (PNG)</button></div>
+        ${libres ? `<p><b>Espacios libres:</b></p><ul>${libres}</ul>` : ''}
+        <div class="table-wrap"><table class="cortes"><thead><tr><th>#</th><th>Pieza</th><th>Medidas (largo × fondo × espesor, cm)</th><th>Dónde va</th></tr></thead><tbody>
+        ${pl.filas.map(f => `<tr><td><b>${f.n}</b></td><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td><td>${esc(f.medidas)}</td><td>${esc(f.pos)}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="hint">Cómo usarlo: marcá en el piso o en el costado la altura indicada y apoyá la tabla de modo que su cara superior quede en esa marca. Los números del dibujo coinciden con la tabla.</p>
+      </div>`;
+    }).join('');
+  }
+  function descargarPng(i) {
+    const svg = document.querySelector(`#plano-out svg[data-mi="${i}"]`);
+    if (!svg) return;
+    const w = +svg.dataset.w, h = +svg.dataset.h;
+    let src = new XMLSerializer().serializeToString(svg).replace('<svg ', `<svg width="${w}" height="${h}" `);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = w * 2; c.height = h * 2;
+      const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = 'plano-' + estado.muebles[i].nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_') + '.png';
+        a.click();
+      });
+    };
+    img.onerror = () => alert('No se pudo crear la imagen. Usá “Imprimir / guardar PDF”.');
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+  }
+  function imprimirPlano() {
+    document.body.classList.add('print-plano');
+    const quitar = () => { document.body.classList.remove('print-plano'); window.removeEventListener('afterprint', quitar); };
+    window.addEventListener('afterprint', quitar);
+    window.print();
+  }
+  $('btn-plano').addEventListener('click', generarPlano);
+  $('plano-out').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-pl]'); if (!b) return;
+    if (b.dataset.pl === 'png') descargarPng(+b.dataset.mi); else imprimirPlano();
+  });
+
   function iniciar() {
     pintarMuebles();
     $('notas').value = estado.notas || '';
@@ -831,4 +1030,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
