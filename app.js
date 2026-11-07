@@ -1755,7 +1755,7 @@ if (typeof document !== 'undefined') {
   const CLAVE_UI = 'calcMuebles_ui';
   function cargarUI() { try { return JSON.parse(localStorage.getItem(CLAVE_UI)) || {}; } catch (e) { return {}; } }
   function guardarUI(u) { localStorage.setItem(CLAVE_UI, JSON.stringify(u)); }
-  function seccionesCard() { return [...document.querySelectorAll('main.vista > section.card')].filter(sec => sec.querySelector(':scope > h2')); }
+  function seccionesCard() { return [...document.querySelectorAll('main.pagina > section.card')].filter(sec => sec.querySelector(':scope > h2')); }
   function aplicarColapso(sec, colapsar) {
     sec.classList.toggle('colapsada', colapsar);
     const h = sec.querySelector(':scope > h2');
