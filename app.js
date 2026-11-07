@@ -331,6 +331,12 @@ function dibujoCaja(v, repisas, puertas) {
 function fN(n) { return (Math.round(n * 10) / 10).toString().replace('.', ','); }
 function escH(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+// Tablas verticales que un tubo atraviesa por el medio (el tubo pasa por un agujero en ellas).
+function pasaPor(t, vs, A) {
+  if (t.x < -0.05 || t.x2 > A + 0.05) return []; // fuera del mueble: no tiene sentido hablar de agujeros
+  return vs.filter(v => v.x > t.x + 0.05 && v.x2 < t.x2 - 0.05 && Math.min(v.y2, t.y2) - Math.max(v.y, t.y) > 0.05);
+}
+
 // Convierte un diseño en medidas de armado. Coordenadas del diseño: x desde la izquierda, y desde ARRIBA.
 function calcularPlano(d) {
   const A = +d.ancho, Hh = +d.alto;
@@ -381,6 +387,9 @@ function calcularPlano(d) {
       const cy = e.y + e.h / 2;
       medidas = `${fN(e.largo)} cm de largo · Ø ${fN(e.esp)}`;
       pos = `Centro del tubo a ${fN(Hh - cy)} cm del piso. Desde la izquierda: ${fN(e.x)} cm (hasta ${fN(e.x2)} cm).`;
+      pasaPor(e, vs, A).forEach(v => {
+        pos += ` Atraviesa ${v.n}. ${v.nombre}: hacerle un agujero de Ø ${fN(e.esp)} cm (un poco más grande para que pase), con el centro a ${fN(Hh - cy)} cm del piso (${fN(cy - v.y)} cm desde el borde superior de esa pieza).`;
+      });
     } else if (e.orient === 'V') {
       medidas = `${fN(e.largo)} × ${fN(e.prof)} × ${fN(e.esp)}`;
       pos = `Borde izquierdo a ${fN(e.x)} cm del lado izquierdo (borde derecho a ${fN(e.x2)} cm; ${fN(A - e.x2)} cm del lado derecho). Va desde ${fN(Hh - e.y2)} hasta ${fN(Hh - e.y)} cm de altura.`;
@@ -525,6 +534,7 @@ function revisarDiseno(d) {
   const A = pl.A, Hh = pl.Hh, E = 0.05;
   const nom = e => `${e.n}. ${e.nombre}`;
   const probs = [];
+  const notas = [];
   const invol = new Set();
   const malPos = new Set();
   const add = (nivel, tipo, texto, piezas, fix) => {
@@ -548,10 +558,20 @@ function revisarDiseno(d) {
   });
 
   // 2b) Tubos que se meten dentro de una tabla vertical
-  pl.ts.forEach(t => pl.vs.forEach(v => {
-    const ox = Math.min(t.x2, v.x2) - Math.max(t.x, v.x), oy = Math.min(t.y2, v.y2) - Math.max(t.y, v.y);
-    if (ox > E && oy > E) add('error', 'choque', `${nom(t)} se mete ${fN(ox)} cm dentro de ${nom(v)}. El tubo debe ir entre las dos tablas verticales: acortalo o movelo.`, [t, v]);
-  }));
+  pl.ts.forEach(t => {
+    if (t.x < -E || t.x2 > A + E) return; // ya se informa como “se sale del mueble”
+    const pasa = pasaPor(t, pl.vs, A);
+    pasa.forEach(v => {
+      const cy = t.y + t.h / 2;
+      notas.push({ tipo: 'agujero', piezas: [t, v],
+        texto: `${nom(t)} atraviesa ${nom(v)}: es normal, pero hay que hacerle un agujero de Ø ${fN(t.esp)} cm (un poco más grande para que el tubo pase), con el centro a ${fN(Hh - cy)} cm del piso (${fN(cy - v.y)} cm desde el borde superior de esa pieza).` });
+    });
+    pl.vs.forEach(v => {
+      if (pasa.includes(v)) return;
+      const ox = Math.min(t.x2, v.x2) - Math.max(t.x, v.x), oy = Math.min(t.y2, v.y2) - Math.max(t.y, v.y);
+      if (ox > E && oy > E) add('error', 'choque', `${nom(t)} se mete ${fN(ox)} cm dentro de ${nom(v)} (el tubo termina dentro de la tabla). El tubo debe ir de una tabla vertical a la otra: acortalo o movelo.`, [t, v]);
+    });
+  });
 
   // 3) Horizontales (y tubos): ¿calzan entre las verticales vecinas?
   pl.hs.concat(pl.ts).forEach(h => {
@@ -624,7 +644,7 @@ function revisarDiseno(d) {
   }
 
   const okPiezas = pl.el.filter(e => !invol.has(e.n));
-  return { pl, problemas: probs, okPiezas };
+  return { pl, problemas: probs, notas, okPiezas };
 }
 
 /* ====== INTERFAZ ====== */
@@ -1178,13 +1198,15 @@ if (typeof document !== 'undefined') {
         return `<div class="aviso${p.nivel === 'aviso' ? ' warn' : ''}">${p.nivel === 'error' ? '⚠' : 'ℹ'} ${esc(p.texto)}
           <div class="no-print" style="margin-top:6px">${k >= 0 ? `<button class="primary" data-fixi="${k}">✔ Corregir esta pieza</button> ` : ''}${ver}</div></div>`;
       }).join('');
+      const notasHtml = rv.notas.map(n => `<div class="aviso nota">ℹ ${esc(n.texto)}
+          <div class="no-print" style="margin-top:6px">${n.piezas.map(e => `<button data-rir="${e.id}" data-mi="${i}">Ver ${e.n}. ${esc(e.nombre)}</button>`).join(' ')}</div></div>`).join('');
       const oks = rv.okPiezas.length && rv.problemas.length
         ? `<p class="hint">✔ Calzan bien: ${rv.okPiezas.map(e => `${e.n}. ${esc(e.nombre)}`).join(' · ')}</p>` : '';
       const adic = mu.piezas.length
         ? `<p class="hint">Nota: las “piezas adicionales” (${mu.piezas.map(p => esc(p.nombre)).join(', ')}) no tienen posición en el diseño, así que su medida no se puede comparar con las vecinas.</p>` : '';
       return `<div class="plano-mueble"><h3>${esc(mu.nombre)}</h3>${cab}
         ${hayFix ? `<div class="no-print"><button class="primary" data-fixall="${i}">✔ Corregir todo lo que se pueda</button></div>` : ''}
-        ${items}${oks}${adic}</div>`;
+        ${items}${notasHtml}${oks}${adic}</div>`;
     }).join('');
   }
   $('btn-revisar').addEventListener('click', generarRevision);
