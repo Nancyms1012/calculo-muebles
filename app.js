@@ -490,13 +490,30 @@ function svgPlano(pl, colorFn, titulo) {
     const px = X(e.x), py = Y(e.y), pw = e.w * s, ph = e.h * s;
     const mal = pl.idsChoque && pl.idsChoque.has(e.n);
     g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" ${e.tubo ? `rx="${Math.min(pw, ph) / 2}"` : ''} fill="${colorFn(e.nombre)}" stroke="${mal ? '#e00000' : '#222'}" stroke-width="${mal ? 3 : 1}"/>`;
-    const vert = ph > pw, largoPx = Math.max(pw, ph);
+    const vert = ph > pw;
+    let largoPx = Math.max(pw, ph), cxTxt = px + pw / 2;
+    if (e.tubo) { // el nombre va en el tramo más largo, sin tapar los aros de los agujeros
+      const pts = [e.x].concat(pasaPor(e, vs, A).map(v => v.x + v.w / 2), [e.x2]).sort((p, q) => p - q);
+      let mejor = 0;
+      for (let k = 0; k < pts.length - 1; k++) if (pts[k + 1] - pts[k] > pts[mejor + 1] - pts[mejor]) mejor = k;
+      largoPx = (pts[mejor + 1] - pts[mejor]) * s - 22;
+      cxTxt = X((pts[mejor] + pts[mejor + 1]) / 2);
+    }
     const full = `${e.n}. ${e.nombre}`;
     const txt = full.length * 5.6 <= largoPx - 6 ? full : String(e.n);
     const attrs = `font-size="10" font-weight="bold" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="2.5" paint-order="stroke" ${F}`;
-    const cx = px + pw / 2, cy = py + ph / 2;
+    const cx = e.tubo ? cxTxt : px + pw / 2, cy = py + ph / 2;
     g += vert ? `<text transform="translate(${cx},${cy}) rotate(-90)" ${attrs}>${escH(txt)}</text>` : `<text x="${cx}" y="${cy}" ${attrs}>${escH(txt)}</text>`;
   });
+
+  // agujeros en las tablas verticales que el tubo atraviesa
+  ts.forEach(t => pasaPor(t, vs, A).forEach(v => {
+    const cx = X(v.x + v.w / 2), cy = Y(t.y + t.h / 2), rp = Math.max(((t.esp + 0.2) / 2) * s + 3, 8);
+    const txt = `agujero Ø ${fN(t.esp + 0.2)}`;
+    g += `<circle cx="${cx}" cy="${cy}" r="${rp}" fill="none" stroke="#fff" stroke-width="4"/><circle cx="${cx}" cy="${cy}" r="${rp}" fill="none" stroke="#222" stroke-width="1.6" stroke-dasharray="3 2"/>`;
+    g += `<line x1="${cx + rp * 0.7}" y1="${cy - rp * 0.7}" x2="${cx + rp + 8}" y2="${cy - rp - 8}" stroke="#222" stroke-width="1"/>`;
+    g += `<text x="${cx + rp + 10}" y="${cy - rp - 8}" font-size="10" font-weight="bold" stroke="#fff" stroke-width="3" paint-order="stroke" ${F}>${txt}</text>`;
+  }));
 
   // zonas donde las piezas se superponen
   (pl.choques || []).forEach(c => {
@@ -977,6 +994,11 @@ if (typeof document !== 'undefined') {
           : `<text x="${cx}" y="${cy}" ${attrs}>${esc(txt)}</text>`;
       }
     });
+    const plc = calcularPlano(d);
+    plc.ts.forEach(t => pasaPor(t, plc.vs, plc.A).forEach(v => {
+      const rr = Math.max((t.esp + 0.2) / 2 + 0.8, 1.6);
+      g += `<circle pointer-events="none" cx="${v.x + v.w / 2}" cy="${t.y + t.h / 2}" r="${rr}" fill="none" stroke="#fff" stroke-width="${fs * 0.3}"/><circle pointer-events="none" cx="${v.x + v.w / 2}" cy="${t.y + t.h / 2}" r="${rr}" fill="none" stroke="#222" stroke-width="${fs * 0.12}" stroke-dasharray="${fs * 0.3} ${fs * 0.2}"/>`;
+    }));
     cv.innerHTML = g;
     pintarResumenDiseno();
   }
