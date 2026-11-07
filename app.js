@@ -417,6 +417,21 @@ function sugerirArreglo(c) {
   return `${nom(a)} y ${nom(b)} se montan. Separalas o acortá una de las dos.`;
 }
 
+// Arreglo automático cuando una horizontal choca con el EXTREMO de una vertical (acortarla).
+function fixExtremo(c) {
+  const a = c.a, b = c.b, E = 0.05;
+  const h = a.orient !== 'V' ? a : (b.orient !== 'V' ? b : null);
+  const v = a.orient === 'V' ? a : (b.orient === 'V' ? b : null);
+  if (!h || !v || h === v) return null;
+  if (v.x > h.x + E && v.x2 < h.x2 - E) return null; // la atraviesa por el medio: hay que partirla
+  if (v.x <= h.x + E) {
+    const largo = r(h.x2 - v.x2);
+    return largo > 0 ? { id: h.id, x: v.x2, largo } : null;
+  }
+  const largo = r(v.x - h.x);
+  return largo > 0 ? { id: h.id, largo } : null;
+}
+
 // Dibujo SVG autónomo (estilos en línea, para poder exportarlo a PNG).
 function svgPlano(pl, colorFn, titulo) {
   const { A, Hh, el, hs, vs, ts, luces } = pl;
@@ -500,6 +515,116 @@ function svgPlano(pl, colorFn, titulo) {
   g += `<text x="${X(A / 2)}" y="${yb + 32}" text-anchor="middle" font-size="10" fill="#555" ${F}>DISTANCIAS HORIZONTALES (cm), de izquierda a derecha</text>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tw} ${th}" data-w="${tw}" data-h="${th}" style="width:100%;max-width:${tw}px;height:auto;background:#fff;border:1px solid #ccc">${g}</svg>`;
+}
+
+/* ====== REVISIÓN DE MEDIDAS (¿calzan las piezas?) ====== */
+// Revisa un diseño como se haría a mano: cada pieza contra sus vecinas.
+// Devuelve {pl, problemas:[{nivel:'error'|'aviso', tipo, texto, piezas:[...], fix?}], okPiezas:[...]}
+function revisarDiseno(d) {
+  const pl = calcularPlano(d);
+  const A = pl.A, Hh = pl.Hh, E = 0.05;
+  const nom = e => `${e.n}. ${e.nombre}`;
+  const probs = [];
+  const invol = new Set();
+  const malPos = new Set();
+  const add = (nivel, tipo, texto, piezas, fix) => {
+    probs.push({ nivel, tipo, texto, piezas, fix });
+    piezas.forEach(p => invol.add(p.n));
+  };
+
+  // 1) Superposiciones
+  pl.choques.forEach(c => add('error', 'choque',
+    `${nom(c.a)} y ${nom(c.b)} se montan ${fN(c.ox)} × ${fN(c.oy)} cm. ${c.sugerencia}`, [c.a, c.b], fixExtremo(c)));
+
+  // 2) Piezas fuera del mueble
+  pl.el.forEach(e => {
+    const f = [];
+    if (e.x < -E) f.push(`${fN(-e.x)} cm a la izquierda`);
+    if (e.x2 > A + E) f.push(`${fN(e.x2 - A)} cm a la derecha`);
+    if (e.y < -E) f.push(`${fN(-e.y)} cm por arriba`);
+    if (e.y2 > Hh + E) f.push(`${fN(e.y2 - Hh)} cm por abajo`);
+    if (f.length) malPos.add(e.n);
+    if (f.length) add('error', 'fuera', `${nom(e)} se sale del mueble (${f.join(', ')}). El mueble mide ${fN(A)} × ${fN(Hh)} cm.`, [e]);
+  });
+
+  // 2b) Tubos que se meten dentro de una tabla vertical
+  pl.ts.forEach(t => pl.vs.forEach(v => {
+    const ox = Math.min(t.x2, v.x2) - Math.max(t.x, v.x), oy = Math.min(t.y2, v.y2) - Math.max(t.y, v.y);
+    if (ox > E && oy > E) add('error', 'choque', `${nom(t)} se mete ${fN(ox)} cm dentro de ${nom(v)}. El tubo debe ir entre las dos tablas verticales: acortalo o movelo.`, [t, v]);
+  }));
+
+  // 3) Horizontales (y tubos): ¿calzan entre las verticales vecinas?
+  pl.hs.concat(pl.ts).forEach(h => {
+    if (invol.has(h.n)) return;
+    let L = null, R = null;
+    pl.vs.forEach(v => {
+      const ov = Math.min(v.y2, h.y2) - Math.max(v.y, h.y);
+      if (ov <= E) return;
+      if (v.x2 <= h.x + E && (!L || v.x2 > L.x2)) L = v;
+      if (v.x >= h.x2 - E && (!R || v.x < R.x)) R = v;
+    });
+    const lb = L ? L.x2 : 0, rb = R ? R.x : A;
+    const gl = h.x - lb, gr = rb - h.x2;
+    if (gl > E || gr > E) {
+      const nuevo = r(rb - lb);
+      const ln = L ? nom(L) : 'el borde izquierdo del mueble', rn = R ? nom(R) : 'el borde derecho del mueble';
+      const hueco = gl > E && gr > E ? `Queda un hueco de ${fN(gl)} cm a la izquierda y ${fN(gr)} cm a la derecha.`
+        : gl > E ? `Queda un hueco de ${fN(gl)} cm a la izquierda.` : `Queda un hueco de ${fN(gr)} cm a la derecha.`;
+      add(L || R ? 'error' : 'aviso', 'hueco',
+        `${nom(h)} mide ${fN(h.w)} cm, pero el espacio entre ${ln} y ${rn} mide ${fN(nuevo)} cm. ${hueco} Para que calce debe medir ${fN(nuevo)} cm.`,
+        [h], L || R ? { id: h.id, x: lb, largo: nuevo } : null);
+    }
+  });
+
+  // 4) Verticales: ¿llegan de tabla a tabla?
+  pl.vs.forEach(v => {
+    if (malPos.has(v.n)) return;
+    let T = null, B = null;
+    pl.hs.forEach(h => {
+      const ov = Math.min(h.x2, v.x2) - Math.max(h.x, v.x);
+      if (ov <= E) return;
+      if (h.y2 <= v.y + E && (!T || h.y2 > T.y2)) T = h;
+      if (h.y >= v.y2 - E && (!B || h.y < B.y)) B = h;
+    });
+    const tb = T ? T.y2 : 0, bb = B ? B.y : Hh;
+    const gt = v.y - tb, gb = bb - v.y2;
+    if (gt > E || gb > E) {
+      const nuevo = r(bb - tb);
+      const tn = T ? nom(T) : 'el borde superior del mueble', bn = B ? nom(B) : 'el piso (borde inferior del mueble)';
+      const hueco = gt > E && gb > E ? `Queda un hueco de ${fN(gt)} cm arriba y ${fN(gb)} cm abajo.`
+        : gt > E ? `Queda un hueco de ${fN(gt)} cm arriba.` : `Queda un hueco de ${fN(gb)} cm abajo.`;
+      add(T || B ? 'error' : 'aviso', 'hueco',
+        `${nom(v)} mide ${fN(v.h)} cm de alto, pero el espacio entre ${tn} y ${bn} mide ${fN(nuevo)} cm. ${hueco} Para que calce debe medir ${fN(nuevo)} cm.`,
+        [v], T || B ? { id: v.id, y: tb, largo: nuevo } : null);
+    }
+  });
+
+  // 5) Medidas totales del mueble
+  if (pl.el.length) {
+    const minX = Math.min(...pl.el.map(e => e.x)), maxX = Math.max(...pl.el.map(e => e.x2));
+    const minY = Math.min(...pl.el.map(e => e.y)), maxY = Math.max(...pl.el.map(e => e.y2));
+    const w = r(maxX - minX), h = r(maxY - minY);
+    if (Math.abs(w - A) > E || Math.abs(h - Hh) > E) {
+      add('aviso', 'total', `Las piezas ocupan ${fN(w)} cm de ancho × ${fN(h)} cm de alto, pero el mueble está configurado en ${fN(A)} × ${fN(Hh)} cm. Revisá las piezas de las orillas (costados, techo, piso) o el ancho/alto del mueble.`, []);
+    }
+  }
+
+  // 6) Fondo y espesor consistentes
+  const duras = pl.el.filter(e => !e.tubo);
+  const porFondo = new Map();
+  duras.forEach(e => { const k = r(e.prof); if (!porFondo.has(k)) porFondo.set(k, []); porFondo.get(k).push(e); });
+  if (porFondo.size > 1) {
+    const partes = [...porFondo].map(([k, l]) => `${fN(k)} cm (${l.map(x => x.n).join(', ')})`).join(' · ');
+    add('aviso', 'fondo', `Las piezas no tienen el mismo fondo: ${partes}. Si todo el mueble tiene un solo fondo, usá “Aplicar profundidad a TODAS las tablas”.`, []);
+  }
+  const espDis = r(d.esp);
+  const raros = duras.filter(e => Math.abs(e.esp - espDis) > E);
+  if (raros.length) {
+    add('aviso', 'espesor', `Hay piezas con espesor distinto al del mueble (${fN(espDis)} cm): ${raros.map(e => `${nom(e)} = ${fN(e.esp)} cm`).join(', ')}. Los largos de las demás deben calcularse con el espesor real.`, raros);
+  }
+
+  const okPiezas = pl.el.filter(e => !invol.has(e.n));
+  return { pl, problemas: probs, okPiezas };
 }
 
 /* ====== INTERFAZ ====== */
@@ -698,6 +823,8 @@ if (typeof document !== 'undefined') {
       ${plan.grupos.map(g => `<div class="kpi"><b>${g.n}</b><span>${esc(g.stock.nombre)}<br>${g.stock.largo}×${g.stock.ancho}×${g.stock.espesor} cm · desperdicio ${Math.round(g.desperdicio * 100)}%</span></div>`).join('')}
       ${hayPrecio ? `<div class="kpi"><b>${fmt(plan.costoTotal)}</b><span>costo estimado</span></div>` : ''}
     </div>`;
+    const malos = incluidos().filter(i => estado.muebles[i].diseno.el.length && revisarDiseno(estado.muebles[i].diseno).problemas.some(p => p.nivel === 'error')).map(i => estado.muebles[i].nombre);
+    $('rev-aviso').innerHTML = malos.length ? `<div class="aviso">⚠ Las piezas de ${malos.map(esc).join(', ')} tienen medidas que no calzan entre sí. Revisalas en “✅ Revisar medidas” antes de cortar.</div>` : '';
     const noInc = estado.muebles.filter(m => m.incluir === false).map(m => m.nombre);
     $('incluidos-res').innerHTML = estado.muebles.length > 1
       ? `<p class="hint">Calculado con: <b>${incluidos().map(i => esc(estado.muebles[i].nombre)).join(', ')}</b>${noInc.length ? ` · No incluidos: ${noInc.map(esc).join(', ')}` : ''}</p>` : '';
@@ -993,6 +1120,78 @@ if (typeof document !== 'undefined') {
   $('d-canvas').addEventListener('pointerup', finArrastre);
   $('d-canvas').addEventListener('pointercancel', finArrastre);
 
+  /* ---- Revisar medidas ---- */
+  let revFixes = [];
+  function irAPieza(mi, id) {
+    irAMueble(mi);
+    selId = id; pintarTablaDiseno(); pintarCanvas();
+    $('d-leyenda').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function aplicarFix(d, f) {
+    const e = d.el.find(x => x.id === f.id);
+    if (!e) return;
+    if (f.x !== undefined) e.x = r(f.x);
+    if (f.y !== undefined) e.y = r(f.y);
+    if (f.largo !== undefined) e.largo = r(f.largo);
+  }
+  function refrescarDiseno(mi) {
+    guardar();
+    if (mi === estado.activo) { pintarTablaDiseno(); pintarCanvas(); }
+  }
+  function corregirTodo(mi) {
+    const d = estado.muebles[mi].diseno;
+    for (let it = 0; it < 6; it++) {
+      const fx = revisarDiseno(d).problemas.filter(p => p.fix).map(p => p.fix);
+      if (!fx.length) break;
+      const hecho = new Set();
+      fx.forEach(f => { if (!hecho.has(f.id)) { hecho.add(f.id); aplicarFix(d, f); } });
+    }
+    refrescarDiseno(mi);
+  }
+  function generarRevision() {
+    sincronizar();
+    const idx = incluidos();
+    if (!idx.length) { alert('Marcá con ✔ al menos un mueble para revisar.'); return; }
+    revFixes = [];
+    $('rev-out').innerHTML = idx.map(i => {
+      const mu = estado.muebles[i], d = mu.diseno;
+      if (!d.el.length) return `<div class="plano-mueble"><h3>${esc(mu.nombre)}</h3><p class="hint">Este mueble no tiene piezas en el diseño. Agregalas en el Diseñador.</p></div>`;
+      const rv = revisarDiseno(d);
+      const errores = rv.problemas.filter(p => p.nivel === 'error').length;
+      const avisos = rv.problemas.length - errores;
+      const hayFix = rv.problemas.some(p => p.fix);
+      const cab = !rv.problemas.length
+        ? `<div class="ok-box">✔ <b>Todo calza.</b> Las ${rv.pl.el.length} piezas encajan entre sí y con las medidas del mueble (${fN(rv.pl.A)} × ${fN(rv.pl.Hh)} × ${fN(rv.pl.prof)} cm).</div>`
+        : `<div class="aviso${errores ? '' : ' warn'}"><b>${errores ? '⚠' : 'ℹ'} ${errores} problema(s) de medidas${avisos ? ` y ${avisos} aviso(s)` : ''}.</b> ${rv.okPiezas.length} de ${rv.pl.el.length} piezas están bien.</div>`;
+      const items = rv.problemas.map(p => {
+        const k = p.fix ? (revFixes.push({ mi: i, fix: p.fix }) - 1) : -1;
+        const ver = p.piezas.slice(0, 3).map(e => `<button data-rir="${e.id}" data-mi="${i}">Ver ${e.n}. ${esc(e.nombre)}</button>`).join(' ');
+        return `<div class="aviso${p.nivel === 'aviso' ? ' warn' : ''}">${p.nivel === 'error' ? '⚠' : 'ℹ'} ${esc(p.texto)}
+          <div class="no-print" style="margin-top:6px">${k >= 0 ? `<button class="primary" data-fixi="${k}">✔ Corregir esta pieza</button> ` : ''}${ver}</div></div>`;
+      }).join('');
+      const oks = rv.okPiezas.length && rv.problemas.length
+        ? `<p class="hint">✔ Calzan bien: ${rv.okPiezas.map(e => `${e.n}. ${esc(e.nombre)}`).join(' · ')}</p>` : '';
+      const adic = mu.piezas.length
+        ? `<p class="hint">Nota: las “piezas adicionales” (${mu.piezas.map(p => esc(p.nombre)).join(', ')}) no tienen posición en el diseño, así que su medida no se puede comparar con las vecinas.</p>` : '';
+      return `<div class="plano-mueble"><h3>${esc(mu.nombre)}</h3>${cab}
+        ${hayFix ? `<div class="no-print"><button class="primary" data-fixall="${i}">✔ Corregir todo lo que se pueda</button></div>` : ''}
+        ${items}${oks}${adic}</div>`;
+    }).join('');
+  }
+  $('btn-revisar').addEventListener('click', generarRevision);
+  $('rev-out').addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.rir) { irAPieza(+b.dataset.mi, Number(b.dataset.rir)); return; }
+    if (b.dataset.fixi !== undefined) {
+      const x = revFixes[+b.dataset.fixi]; if (!x) return;
+      aplicarFix(estado.muebles[x.mi].diseno, x.fix); refrescarDiseno(x.mi); generarRevision(); return;
+    }
+    if (b.dataset.fixall !== undefined) {
+      if (!confirm('Se van a ajustar el largo y la posición de las piezas que no calzan, según las vecinas. ¿Continuar?')) return;
+      corregirTodo(+b.dataset.fixall); generarRevision();
+    }
+  });
+
   /* ---- Plano de armado ---- */
   function generarPlano() {
     sincronizar();
@@ -1076,4 +1275,4 @@ if (typeof document !== 'undefined') {
   iniciar();
 }
 
-if (typeof module !== 'undefined') module.exports = { calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

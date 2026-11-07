@@ -80,3 +80,6 @@ body.print-plano #plano-sec{display:block!important}
 body.print-plano .plano-mueble{break-after:page;page-break-after:always}
 .malo{color:#e00000;font-weight:bold;font-size:.8rem}
 .aviso button{font-size:.8rem;padding:4px 8px}
+.aviso.warn{background:#fff7e0;border-left-color:#e0a000}
+.ok-box{background:#e8f6ea;border-left:4px solid #2e9e5b;padding:8px;margin:8px 0;border-radius:4px}
+@media print{#rev-sec{display:none}}
