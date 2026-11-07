@@ -201,13 +201,23 @@
     <h2>🛋 Agregar muebles</h2>
     <div class="row">
       <label>Mueble de la lista<select id="hab-preset"></select></label>
+      <label>Ancho (cm)<input id="hab-pr-w" type="number" min="1"></label>
+      <label>Fondo (cm)<input id="hab-pr-h" type="number" min="1"></label>
       <button id="hab-add-preset" class="primary">+ Agregar</button>
     </div>
+    <div class="row">
+      <button id="hab-pr-guardar" title="La próxima vez este mueble de la lista saldrá con estas medidas">💾 Guardar estas medidas para este mueble</button>
+      <button id="hab-pr-reset" hidden>↺ Volver a la medida original</button>
+      <button id="hab-pr-quitar" class="danger" hidden>🗑 Quitar de mi lista</button>
+    </div>
+    <p class="hint" id="hab-pr-nota"></p>
+    <p class="hint">Las medidas de la lista se pueden cambiar antes de agregar el mueble. Si querés que queden guardadas, tocá 💾. Los muebles marcados con ★ son los que guardaste vos.</p>
     <div class="row">
       <label>Otro mueble: nombre<input id="hab-c-nombre" type="text" placeholder="Ej: Perchero"></label>
       <label>Ancho (cm)<input id="hab-c-w" type="number" min="1" value="100"></label>
       <label>Fondo (cm)<input id="hab-c-h" type="number" min="1" value="50"></label>
       <button id="hab-add-custom" class="primary">+ Agregar con mis medidas</button>
+      <button id="hab-save-custom" title="Lo guarda en la lista de arriba para usarlo otra vez">★ Guardar en mi lista</button>
     </div>
     <h3>🚪 Puerta (siempre sobre una pared)</h3>
     <div class="row">

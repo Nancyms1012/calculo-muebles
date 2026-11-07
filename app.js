@@ -974,6 +974,8 @@ if (typeof document !== 'undefined') {
       });
     });
     if (!(s.habActiva >= 0 && s.habActiva < s.habs.length)) s.habActiva = 0;
+    if (!s.presetsHab || typeof s.presetsHab !== 'object') s.presetsHab = {};
+    if (!Array.isArray(s.misPresets)) s.misPresets = [];
     if (!(s.activo >= 0 && s.activo < s.muebles.length)) s.activo = 0;
     s.diseno = s.muebles[s.activo].diseno;
     s.piezas = s.muebles[s.activo].piezas;
@@ -1735,7 +1737,56 @@ if (typeof document !== 'undefined') {
   });
 
   /* ---- agregar elementos ---- */
-  $('hab-preset').innerHTML = PRESETS_HAB.map((p, i) => `<option value="${i}">${p[0]} (${p[1]} × ${p[2]})</option>`).join('');
+  // Lista de muebles predeterminados + los guardados por la usuaria; las medidas se pueden cambiar y guardar.
+  function presetsHab() {
+    const ov = estado.presetsHab || {};
+    return PRESETS_HAB.map(p => { const o = ov[p[0]]; return { nombre: p[0], w: o ? o.w : p[1], h: o ? o.h : p[2], color: p[3], custom: false, mod: !!o, w0: p[1], h0: p[2] }; })
+      .concat((estado.misPresets || []).map((p, i) => ({ nombre: p.nombre, w: p.w, h: p.h, color: p.color || '#d9b585', custom: true, mod: false, ci: i })));
+  }
+  function pintarPresetsHab(sel) {
+    const lista = presetsHab();
+    $('hab-preset').innerHTML = lista.map((p, i) => `<option value="${i}">${p.custom ? '★ ' : ''}${esc(p.nombre)} (${fN(p.w)} × ${fN(p.h)})${p.mod ? ' ✎' : ''}</option>`).join('');
+    $('hab-preset').value = String(Math.max(0, Math.min(lista.length - 1, sel || 0)));
+    cargarPresetEnCampos();
+  }
+  function cargarPresetEnCampos() {
+    const p = presetsHab()[+$('hab-preset').value]; if (!p) return;
+    $('hab-pr-w').value = p.w; $('hab-pr-h').value = p.h;
+    $('hab-pr-quitar').hidden = !p.custom; $('hab-pr-reset').hidden = p.custom || !p.mod;
+    $('hab-pr-nota').textContent = p.mod ? `Medida original: ${fN(p.w0)} × ${fN(p.h0)} cm. La que ves es la que guardaste.` : '';
+  }
+  $('hab-preset').addEventListener('change', cargarPresetEnCampos);
+  function medidasPreset() {
+    const w = parseFloat($('hab-pr-w').value), h = parseFloat($('hab-pr-h').value);
+    return w > 0 && h > 0 ? { w, h } : null;
+  }
+  $('hab-pr-guardar').addEventListener('click', () => {
+    const i = +$('hab-preset').value, p = presetsHab()[i], m = medidasPreset();
+    if (!p || !m) { alert('Escribí el ancho y el fondo del mueble.'); return; }
+    if (p.custom) estado.misPresets[p.ci] = Object.assign({}, estado.misPresets[p.ci], m);
+    else if (m.w === p.w0 && m.h === p.h0) delete estado.presetsHab[p.nombre];
+    else estado.presetsHab[p.nombre] = m;
+    guardar(); pintarPresetsHab(i);
+  });
+  $('hab-pr-reset').addEventListener('click', () => {
+    const i = +$('hab-preset').value, p = presetsHab()[i];
+    if (p && !p.custom) { delete estado.presetsHab[p.nombre]; guardar(); pintarPresetsHab(i); }
+  });
+  $('hab-pr-quitar').addEventListener('click', () => {
+    const i = +$('hab-preset').value, p = presetsHab()[i];
+    if (!p || !p.custom || !confirm(`¿Quitar “${p.nombre}” de tu lista? (Los que ya pusiste en la habitación no se borran.)`)) return;
+    estado.misPresets.splice(p.ci, 1); guardar(); pintarPresetsHab(0);
+  });
+  $('hab-save-custom').addEventListener('click', () => {
+    const nombre = $('hab-c-nombre').value.trim(), w = parseFloat($('hab-c-w').value), h = parseFloat($('hab-c-h').value);
+    if (!nombre) { alert('Escribí el nombre del mueble para guardarlo en tu lista.'); return; }
+    if (!(w > 0 && h > 0)) { alert('Escribí el ancho y el fondo del mueble.'); return; }
+    const ya = estado.misPresets.findIndex(p => p.nombre.toLowerCase() === nombre.toLowerCase());
+    if (ya >= 0) estado.misPresets[ya] = { nombre, w, h, color: '#d9b585' }; else estado.misPresets.push({ nombre, w, h, color: '#d9b585' });
+    guardar();
+    pintarPresetsHab(PRESETS_HAB.length + (ya >= 0 ? ya : estado.misPresets.length - 1));
+    $('hab-c-nombre').value = '';
+  });
   function agregarItemHab(base) {
     const hb = hab();
     const it = Object.assign({ id: Date.now() + Math.random(), nombre: 'Mueble', tipo: 'mueble', w: 100, h: 50, x: 0, y: 0, rot: 0, color: '#d9b585' }, base);
@@ -1743,7 +1794,11 @@ if (typeof document !== 'undefined') {
     hb.items.push(it); habSel = it.id; guardar(); refrescarHab();
     return it;
   }
-  $('hab-add-preset').addEventListener('click', () => { const p = PRESETS_HAB[+$('hab-preset').value]; agregarItemHab({ nombre: p[0], w: p[1], h: p[2], color: p[3] }); });
+  $('hab-add-preset').addEventListener('click', () => {
+    const p = presetsHab()[+$('hab-preset').value], m = medidasPreset();
+    if (!p || !m) { alert('Escribí el ancho y el fondo del mueble.'); return; }
+    agregarItemHab({ nombre: p.nombre, w: m.w, h: m.h, color: p.color });
+  });
   $('hab-add-custom').addEventListener('click', () => {
     const w = parseFloat($('hab-c-w').value), h = parseFloat($('hab-c-h').value);
     if (!(w > 0 && h > 0)) { alert('Escribí el ancho y el fondo del mueble.'); return; }
@@ -2108,7 +2163,7 @@ if (typeof document !== 'undefined') {
   });
 
   function refrescarHab() { pintarHabTabla(); pintarHabCanvas(); pintarHabMedidas(); pintarHabPuertaEd(); }
-  function pintarHab() { pintarHabTabs(); pintarHabParedes(); pintarHabPuertaForm(); refrescarHab(); }
+  function pintarHab() { pintarPresetsHab(+$('hab-preset').value || 0); pintarHabTabs(); pintarHabParedes(); pintarHabPuertaForm(); refrescarHab(); }
 
   /* ---- Secciones contraíbles ---- */
   const CLAVE_UI = 'calcMuebles_ui';
@@ -2168,6 +2223,7 @@ if (typeof document !== 'undefined') {
     if (vistaActual === 'hab') pintarHab();
   }
   iniciar();
+  pintarPresetsHab(0);
   iniciarColapsables();
   mostrarVista(cargarUI().vista === 'hab' ? 'hab' : 'cortes');
 }
