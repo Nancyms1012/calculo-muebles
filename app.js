@@ -852,6 +852,7 @@ if (typeof document !== 'undefined') {
 
   function pintarResultado(plan) {
     $('resultado').hidden = false;
+    expandir($('resultado'));
     const multi = incluidos().length > 1;
     const nomM = i => estado.muebles[i] ? estado.muebles[i].nombre : '';
     const hayPrecio = plan.costoTotal > 0;
@@ -1175,6 +1176,7 @@ if (typeof document !== 'undefined') {
   /* ---- Revisar medidas ---- */
   let revFixes = [];
   function irAPieza(mi, id) {
+    expandir($('d-canvas').closest('section'));
     irAMueble(mi);
     selId = id; pintarTablaDiseno(); pintarCanvas();
     $('d-leyenda').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1307,6 +1309,7 @@ if (typeof document !== 'undefined') {
     const ir = ev.target.closest('button[data-ir]');
     if (ir) {
       const id = Number(ir.dataset.ir);
+      expandir($('d-canvas').closest('section'));
       irAMueble(+ir.dataset.mi);
       selId = id; pintarTablaDiseno(); pintarCanvas();
       $('d-leyenda').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1315,6 +1318,50 @@ if (typeof document !== 'undefined') {
     const b = ev.target.closest('button[data-pl]'); if (!b) return;
     if (b.dataset.pl === 'png') descargarPng(+b.dataset.mi); else imprimirPlano();
   });
+
+
+  /* ---- Secciones contraíbles ---- */
+  const CLAVE_UI = 'calcMuebles_ui';
+  function cargarUI() { try { return JSON.parse(localStorage.getItem(CLAVE_UI)) || {}; } catch (e) { return {}; } }
+  function guardarUI(u) { localStorage.setItem(CLAVE_UI, JSON.stringify(u)); }
+  function seccionesCard() { return [...document.querySelectorAll('main > section.card')].filter(sec => sec.querySelector(':scope > h2')); }
+  function aplicarColapso(sec, colapsar) {
+    sec.classList.toggle('colapsada', colapsar);
+    const h = sec.querySelector(':scope > h2');
+    if (h) h.setAttribute('aria-expanded', colapsar ? 'false' : 'true');
+  }
+  function guardarColapsadas() {
+    const u = cargarUI();
+    u.colapsadas = seccionesCard().map((sec, i) => sec.classList.contains('colapsada') ? i : -1).filter(i => i >= 0);
+    guardarUI(u);
+  }
+  function expandir(sec) { if (sec && sec.classList.contains('colapsada')) { aplicarColapso(sec, false); guardarColapsadas(); } }
+  function iniciarColapsables() {
+    const secs = seccionesCard();
+    const guardadas = new Set(cargarUI().colapsadas || []);
+    secs.forEach((sec, i) => {
+      const h = sec.querySelector(':scope > h2');
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'card-body';
+      while (h.nextSibling) cuerpo.appendChild(h.nextSibling);
+      sec.appendChild(cuerpo);
+      const chev = document.createElement('span');
+      chev.className = 'chev'; chev.textContent = '▾';
+      h.insertBefore(chev, h.firstChild);
+      h.classList.add('toggle'); h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0');
+      h.title = 'Tocá para contraer o expandir';
+      const alternar = () => { aplicarColapso(sec, !sec.classList.contains('colapsada')); guardarColapsadas(); };
+      h.addEventListener('click', alternar);
+      h.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); alternar(); } });
+      aplicarColapso(sec, guardadas.has(i));
+    });
+    const barra = document.createElement('div');
+    barra.className = 'barra-secciones no-print';
+    barra.innerHTML = '<button id="sec-contraer">▸ Contraer todas</button> <button id="sec-expandir">▾ Expandir todas</button>';
+    secs[0].parentNode.insertBefore(barra, secs[0]);
+    barra.querySelector('#sec-contraer').addEventListener('click', () => { seccionesCard().forEach(sec => aplicarColapso(sec, true)); guardarColapsadas(); });
+    barra.querySelector('#sec-expandir').addEventListener('click', () => { seccionesCard().forEach(sec => aplicarColapso(sec, false)); guardarColapsadas(); });
+  }
 
   function iniciar() {
     pintarMuebles();
@@ -1330,6 +1377,7 @@ if (typeof document !== 'undefined') {
     refrescarVistas();
   }
   iniciar();
+  iniciarColapsables();
 }
 
 if (typeof module !== 'undefined') module.exports = { revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

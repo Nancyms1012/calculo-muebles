@@ -85,3 +85,12 @@ body.print-plano .plano-mueble{break-after:page;page-break-after:always}
 @media print{#rev-sec{display:none}}
 label.inline{display:inline-flex;flex-direction:row;align-items:center;gap:6px;margin-right:10px;margin-bottom:6px}
 label.inline select{width:auto}
+h2.toggle{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px}
+h2.toggle:hover{color:#4a2d15}
+.chev{display:inline-block;transition:transform .15s;font-size:1rem;width:1.1em}
+.card.colapsada .chev{transform:rotate(-90deg)}
+.card.colapsada > .card-body{display:none}
+.card.colapsada > h2{margin-bottom:0}
+.barra-secciones{display:flex;gap:8px;flex-wrap:wrap}
+.barra-secciones button{margin:0;font-size:.85rem;padding:6px 10px}
+@media print{.card.colapsada > .card-body{display:block!important}}
