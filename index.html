@@ -113,7 +113,7 @@
       <label>Grosor del corte (sierra), cm
         <input type="number" id="kerf" step="0.1" min="0" value="0.3">
       </label>
-      <label class="check"><input type="checkbox" id="rotar"> Permitir girar piezas (ignorar dirección de la veta)</label>
+      <label class="check" title="La melamina no tiene veta, así que el cálculo siempre puede girar las piezas para aprovechar mejor las tablas"><input type="checkbox" id="rotar" checked disabled> Girar piezas libremente (melamina: la veta no importa)</label>
       <label class="check"><input type="checkbox" id="unir" checked> Unir tablas (encolar tiras) si la pieza es más ancha que la tabla</label>
     </div>
     <button id="btn-calcular" class="primary big">Calcular</button>

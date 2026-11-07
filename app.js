@@ -2214,7 +2214,7 @@ if (typeof document !== 'undefined') {
     $('d-ancho').value = dis().ancho; $('d-alto').value = dis().alto; $('d-prof').value = dis().prof; $('d-esp').value = dis().esp;
     pintarTablaDiseno(); pintarCanvas();
     $('kerf').value = estado.kerf;
-    $('rotar').checked = !!estado.rotar;
+    $('rotar').checked = true; // siempre: el cálculo gira las piezas (melamina)
     $('unir').checked = estado.unir !== false;
     pintarPlantilla(); pintarPiezas(); pintarStock();
     $('plano-modo').value = estado.planoModo || 'activo';
