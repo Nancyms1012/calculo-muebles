@@ -131,14 +131,16 @@
 
   <section class="card" id="rev-sec">
     <h2>✅ Revisar que las medidas calcen</h2>
-    <p class="hint">Revisa el diseño como lo harías a mano con la cinta: que cada repisa o tapa calce entre los costados, que las divisiones lleguen de tabla a tabla, que nada se pase del mueble ni quede encimado. Se hace con los muebles marcados con ✔. Lo que tenga arreglo se puede corregir con un botón.</p>
+    <p class="hint">Revisa el diseño como lo harías a mano con la cinta: que cada repisa o tapa calce entre los costados, que las divisiones lleguen de tabla a tabla, que nada se pase del mueble ni quede encimado. Por defecto revisa el mueble de la pestaña en la que estás. Lo que tenga arreglo se puede corregir con un botón.</p>
+    <label class="inline">Mostrar <select id="rev-modo"><option value="activo">Solo el mueble de la pestaña activa</option><option value="todos">Todos los muebles marcados con ✔</option></select></label>
     <button id="btn-revisar" class="primary">Revisar medidas</button>
     <div id="rev-out"></div>
   </section>
 
   <section class="card" id="plano-sec">
     <h2>📐 Plano de armado</h2>
-    <p class="hint">Genera un esquema con la medida exacta de dónde va cada pieza (alturas desde el piso, distancias desde el borde y espacios libres) para usarlo al armar. Se hace con los muebles marcados con ✔. Si cambiás el diseño, volvé a generarlo.</p>
+    <p class="hint">Genera un esquema con la medida exacta de dónde va cada pieza (alturas desde el piso, distancias desde el borde y espacios libres) para usarlo al armar. Por defecto muestra el mueble de la pestaña en la que estás (si cambiás de pestaña, se actualiza solo). Si cambiás el diseño, volvé a generarlo.</p>
+    <label class="inline">Mostrar <select id="plano-modo"><option value="activo">Solo el mueble de la pestaña activa</option><option value="todos">Todos los muebles marcados con ✔</option></select></label>
     <button id="btn-plano" class="primary">Generar plano de armado</button>
     <div id="plano-out"></div>
   </section>

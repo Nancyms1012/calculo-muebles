@@ -1120,6 +1120,16 @@ if (typeof document !== 'undefined') {
   $('d-canvas').addEventListener('pointerup', finArrastre);
   $('d-canvas').addEventListener('pointercancel', finArrastre);
 
+  /* ---- Qué muebles mostrar en Plano / Revisión ---- */
+  function indicesVista(selId_) {
+    sincronizar();
+    return $(selId_).value === 'todos' ? incluidos() : [estado.activo];
+  }
+  function refrescarVistas() {
+    if ($('rev-out').innerHTML.trim() && $('rev-modo').value === 'activo') generarRevision();
+    if ($('plano-out').innerHTML.trim() && $('plano-modo').value === 'activo') generarPlano();
+  }
+
   /* ---- Revisar medidas ---- */
   let revFixes = [];
   function irAPieza(mi, id) {
@@ -1149,8 +1159,7 @@ if (typeof document !== 'undefined') {
     refrescarDiseno(mi);
   }
   function generarRevision() {
-    sincronizar();
-    const idx = incluidos();
+    const idx = indicesVista('rev-modo');
     if (!idx.length) { alert('Marcá con ✔ al menos un mueble para revisar.'); return; }
     revFixes = [];
     $('rev-out').innerHTML = idx.map(i => {
@@ -1179,6 +1188,7 @@ if (typeof document !== 'undefined') {
     }).join('');
   }
   $('btn-revisar').addEventListener('click', generarRevision);
+  $('rev-modo').addEventListener('change', () => { estado.revModo = $('rev-modo').value; guardar(); if ($('rev-out').innerHTML.trim()) generarRevision(); });
   $('rev-out').addEventListener('click', ev => {
     const b = ev.target.closest('button'); if (!b) return;
     if (b.dataset.rir) { irAPieza(+b.dataset.mi, Number(b.dataset.rir)); return; }
@@ -1194,8 +1204,7 @@ if (typeof document !== 'undefined') {
 
   /* ---- Plano de armado ---- */
   function generarPlano() {
-    sincronizar();
-    const idx = incluidos();
+    const idx = indicesVista('plano-modo');
     if (!idx.length) { alert('Marcá con ✔ al menos un mueble para generar su plano.'); return; }
     $('plano-out').innerHTML = '<div class="no-print" style="margin:8px 0"><button class="primary" data-pl="print">🖨 Imprimir / guardar PDF</button></div>' + idx.map(i => {
       const mu = estado.muebles[i], d = mu.diseno;
@@ -1249,6 +1258,7 @@ if (typeof document !== 'undefined') {
     window.print();
   }
   $('btn-plano').addEventListener('click', generarPlano);
+  $('plano-modo').addEventListener('change', () => { estado.planoModo = $('plano-modo').value; guardar(); if ($('plano-out').innerHTML.trim()) generarPlano(); });
   $('plano-out').addEventListener('click', ev => {
     const ir = ev.target.closest('button[data-ir]');
     if (ir) {
@@ -1271,6 +1281,9 @@ if (typeof document !== 'undefined') {
     $('rotar').checked = !!estado.rotar;
     $('unir').checked = estado.unir !== false;
     pintarPlantilla(); pintarPiezas(); pintarStock();
+    $('plano-modo').value = estado.planoModo || 'activo';
+    $('rev-modo').value = estado.revModo || 'activo';
+    refrescarVistas();
   }
   iniciar();
 }

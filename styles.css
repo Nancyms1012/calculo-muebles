@@ -83,3 +83,5 @@ body.print-plano .plano-mueble{break-after:page;page-break-after:always}
 .aviso.warn{background:#fff7e0;border-left-color:#e0a000}
 .ok-box{background:#e8f6ea;border-left:4px solid #2e9e5b;padding:8px;margin:8px 0;border-radius:4px}
 @media print{#rev-sec{display:none}}
+label.inline{display:inline-flex;flex-direction:row;align-items:center;gap:6px;margin-right:10px;margin-bottom:6px}
+label.inline select{width:auto}
