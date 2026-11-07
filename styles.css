@@ -122,3 +122,10 @@ body.print-hab #hab-sec-med{break-before:page}
 .ok-txt{color:#1d6b32;font-weight:bold}
 .mal-txt{color:#b00020;font-weight:bold}
 #hab-sec-add h3{margin:14px 0 6px;font-size:1rem;color:#6b4423}
+.madera-panel{border:1px solid #e3d6c5;background:#fbf8f3;border-radius:8px;padding:10px 12px;margin:10px 0}
+.madera-panel[hidden]{display:none}
+#hab-madera-lista label.fila{display:flex;flex-direction:row;align-items:flex-start;gap:8px;padding:6px 4px;border-bottom:1px solid #eee;font-size:.95rem}
+#hab-madera-lista label.fila input{width:auto;margin-top:3px}
+#hab-madera-lista small{display:block;color:#6d5f52}
+#hab-madera-lista small.dup{color:#a65a00}
+#hab-madera-lista small.ya{color:#1d6b32}

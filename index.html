@@ -229,9 +229,18 @@
     <div>
       <button id="hab-add-ventana">🪟 Ventana</button>
       <button id="hab-add-alfombra">▭ Alfombra</button>
-      <button id="hab-sync-madera">🪵 Traer mis muebles de madera</button>
+      <button id="hab-sync-madera">🪵 Traer mis muebles de madera…</button>
     </div>
-    <p class="hint">“Traer mis muebles de madera” agrega cada mueble de la pestaña de cortes (con su ancho y fondo) y, si ya lo trajiste, actualiza sus medidas sin mover su lugar.</p>
+    <div id="hab-madera-panel" class="madera-panel" hidden>
+      <b>¿Cuáles de tus muebles de madera van en esta habitación?</b>
+      <p class="hint">Marcá solo los que querés traer. Se usa el ancho y el fondo de cada mueble. Si ya trajiste uno, al marcarlo se actualizan sus medidas sin mover su lugar.</p>
+      <div id="hab-madera-lista"></div>
+      <button id="hab-madera-traer" class="primary">Traer los marcados</button>
+      <button id="hab-madera-todos">Marcar todos</button>
+      <button id="hab-madera-ninguno">Quitar marcas</button>
+      <button id="hab-madera-cerrar">Cerrar</button>
+    </div>
+    <div id="hab-madera-msg" class="hint"></div>
   </section>
 
   <section class="card" id="hab-plano-sec">

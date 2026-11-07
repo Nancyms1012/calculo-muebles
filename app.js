@@ -1757,17 +1757,42 @@ if (typeof document !== 'undefined') {
     if (!(l > 0 && gr > 0)) { alert('Escribí el largo y el grosor de la división.'); return; }
     agregarItemHab({ nombre: 'División', tipo: 'tabique', w: l, h: gr, color: '#8a8a8a' });
   });
+  // Elegir cuáles muebles de madera traer a la habitación
+  function pintarListaMadera() {
+    sincronizar();
+    const ms = estado.muebles, dim = m => `${r(m.diseno.ancho)}|${r(m.diseno.prof)}`;
+    $('hab-madera-lista').innerHTML = ms.map((m, i) => {
+      const ya = hab().items.find(x => x.origen === m.uid);
+      const copias = ms.map((o, k) => ({ o, k })).filter(({ o, k }) => k !== i && dim(o) === dim(m));
+      const piezas = m.diseno.el.length;
+      return `<label class="fila"><input type="checkbox" data-mi="${i}"><span><b>${esc(m.nombre)}</b> — ${fN(m.diseno.ancho)} de ancho × ${fN(m.diseno.prof)} de fondo × ${fN(m.diseno.alto)} de alto (cm)
+        <small>${piezas ? piezas + ' pieza(s) de madera en su diseño' : 'sin piezas dibujadas todavía'}</small>
+        ${ya ? '<small class="ya">✔ Ya está en esta habitación: si lo marcás, se actualizan sus medidas.</small>' : ''}
+        ${copias.length ? `<small class="dup">⚠ Tiene las mismas medidas de afuera que ${copias.map(c => '“' + esc(c.o.nombre) + '”').join(' y ')}: ¿es una copia con otra distribución interna? Traé solo la que uses.</small>` : ''}</span></label>`;
+    }).join('') || '<p class="hint">Todavía no tenés muebles en la pestaña de cortes.</p>';
+  }
   $('hab-sync-madera').addEventListener('click', () => {
+    const p = $('hab-madera-panel'); p.hidden = !p.hidden;
+    $('hab-madera-msg').textContent = '';
+    if (!p.hidden) pintarListaMadera();
+  });
+  $('hab-madera-cerrar').addEventListener('click', () => { $('hab-madera-panel').hidden = true; });
+  $('hab-madera-todos').addEventListener('click', () => document.querySelectorAll('#hab-madera-lista input').forEach(c => c.checked = true));
+  $('hab-madera-ninguno').addEventListener('click', () => document.querySelectorAll('#hab-madera-lista input').forEach(c => c.checked = false));
+  $('hab-madera-traer').addEventListener('click', () => {
+    const marcados = [...document.querySelectorAll('#hab-madera-lista input:checked')].map(c => +c.dataset.mi);
+    if (!marcados.length) { $('hab-madera-msg').textContent = 'Marcá al menos un mueble de la lista.'; return; }
     sincronizar();
     let nuevos = 0, actualizados = 0;
-    estado.muebles.forEach(m => {
-      const w = r(m.diseno.ancho), h = r(m.diseno.prof);
+    marcados.forEach(i => {
+      const m = estado.muebles[i], w = r(m.diseno.ancho), h = r(m.diseno.prof);
       const it = hab().items.find(x => x.origen === m.uid);
       if (it) { it.nombre = m.nombre; it.w = w; it.h = h; clampHab(it); actualizados++; }
       else { agregarItemHab({ nombre: m.nombre, w, h, color: '#d9b585', origen: m.uid }); nuevos++; }
     });
     guardar(); refrescarHab();
-    alert(`Listo: ${nuevos} mueble(s) nuevo(s) y ${actualizados} actualizado(s). Se usó el ancho y el fondo de cada mueble.`);
+    $('hab-madera-panel').hidden = true;
+    $('hab-madera-msg').textContent = `Listo: ${nuevos} mueble(s) nuevo(s)${actualizados ? ` y ${actualizados} actualizado(s)` : ''} en “${hab().nombre}”.`;
   });
 
   /* ---- puertas (siempre sobre una pared) ---- */
