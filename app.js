@@ -243,9 +243,9 @@ const PLANTILLAS = {
     dibujo: v => dibujoCaja(v, v.repisas, true),
   },
   tabla: {
-    nombre: 'Tabla suelta (estante, tapa, etc.)',
+    nombre: 'Tabla o estante',
     campos: [['largo', 'Largo', 100], ['ancho', 'Ancho (fondo)', 30], ['esp', 'Espesor', 1.8], ['cant', 'Cantidad', 1]],
-    piezas: v => [{ nombre: 'Tabla / Estante', largo: v.largo, ancho: v.ancho, espesor: v.esp, cant: Math.max(1, Math.round(v.cant) || 1) }],
+    piezas: v => [{ nombre: 'Tabla o estante', largo: v.largo, ancho: v.ancho, espesor: v.esp, cant: Math.max(1, Math.round(v.cant) || 1) }],
     dibujo: v => dibujoTabla(v),
   },
   otro: {
