@@ -54,7 +54,8 @@ estado = {
   }],
   habActiva: 0,
   presetsHab: { 'Cama queen': {w, h} },        // medidas guardadas de los muebles predeterminados
-  misPresets: [{nombre, w, h, color}]          // muebles propios guardados con ★
+  misPresets: [{nombre, w, h, color}],         // muebles propios guardados con ★
+  habPaso: { on: false, cm: 60 }               // aviso opcional de pasos angostos en la revisión de la habitación
 }
 ```
 
@@ -63,7 +64,8 @@ estado = {
 `y` crece hacia abajo (0 = techo del mueble). Para `H` el rectángulo es `largo × esp`; para `V`, `esp × largo`. El tubo tiene `tubo:true`, `esp` = diámetro, `prof = 0`.
 
 **Item de habitación (`habs[].items[]`):**
-`{ id, nombre, tipo:'mueble'|'alfombra'|'puerta'|'ventana'|'tabique', w, h, x, y, rot:0|90|180|270, color, origen? }`
+`{ id, nombre, tipo:'mueble'|'alfombra'|'puerta'|'ventana'|'tabique', w, h, x, y, rot:0|90|180|270, color, origen?, frente? }`
+`frente` (solo muebles) = lado de la raya negra **respecto al mueble sin girar**: `'abajo'` (por defecto) | `'arriba'` | `'izq'` | `'der'` | `'ninguno'`. El lado que se ve en el plano depende del giro: `frenteVisual(it)` y `frenteLocalDesdeVisual(v, rot)` convierten (el selector de la lista y el botón 🧭 trabajan con el lado **visible**).
 `origen` = `uid` del mueble de madera del que vino. **Puertas** además: `pared, pos, bisagra:'ini'|'fin', afuera` (fuente de verdad) y `x, y, rot, flip, ax, ay, bx, by` (derivados por `ubicarPuerta`, no editar a mano).
 
 **Migración:** `migrar(s)` (dentro del bloque de interfaz) completa cualquier campo nuevo con valores por defecto. **Todo campo nuevo del estado debe inicializarse ahí** para no romper proyectos viejos ni respaldos `.json` antiguos.
@@ -84,7 +86,8 @@ estado = {
 | Colores | `COLORES`, `COLORES_OTROS`, `colorDe(nombre)`, `leyendaHTML` |
 | Plano de armado | `calcularPlano(d)`, `svgPlano`, `pasaPor`, `sugerirArreglo`, `fixExtremo` |
 | Revisión de medidas | `revisarDiseno(d)` → `{pl, problemas, notas, okPiezas}` |
-| Habitación | `geomHab`, `rectDentro`, `distParedes`, `ubicarPuerta`, `cerrarParedes`, `rectHab`, `revisarHabitacion`, `posicionLibre`, `snapMove`, `PRESETS_HAB`, `nuevaHab`, `paredesRect`, `esRectangular` |
+| Habitación | `geomHab`, `rectDentro`, `distParedes`, `ubicarPuerta`, `cerrarParedes`, `rectHab`, `revisarHabitacion(hb, {paso}?)`, `posicionLibre`, `snapMove`, `PRESETS_HAB`, `nuevaHab`, `paredesRect`, `esRectangular` |
+| Habitación: frente y espacios | `LADOS`, `frenteVisual`, `frenteLocalDesdeVisual` · `obstaculosHab`, `distLibres` (vecino más cercano por lado: pared o mueble), `espaciosEntre` (pares que se miran de frente), `rejillaLibre` / `mayorRectLibre` / `espaciosLibres` (rectángulos libres más grandes), `cabeEnLibre` |
 | Utilidades | `r(n)` redondea a 2 decimales · `fN(n)` formatea 1 decimal con coma · `escH` escapa HTML |
 
 ### Interfaz (dentro de `if (typeof document !== 'undefined')`)
@@ -118,6 +121,8 @@ Orden de reglas (cada una puede traer `fix` automático):
 - `rectDentro` = 4 esquinas (recortadas 0,5 cm) dentro del polígono (ray casting) + ninguna pared cruza el interior.
 - `ubicarPuerta`: a partir de `(pared, pos, w, bisagra, afuera)` calcula la caja del abanico (`x,y`), la rotación y el espejo (`flip`) con la transformación `translate(c) rotate(rot) [scale(-1,1)] translate(-w/2,-h/2)`; verificado en las 16 combinaciones (4 paredes × bisagra × adentro/afuera).
 - `snapMove`: se pega (≤ 4 cm) a paredes, vértices, centro y bordes de otros elementos; si no, a la cuadrícula.
+- **Espacios:** `distLibres` mide, desde el rectángulo de un mueble, hasta la pared (rayo desde el centro) y hasta los obstáculos (muebles, divisiones y el **giro de puertas que abren hacia adentro**) que se superponen en el eje perpendicular. `espaciosEntre` lista los pares sin otro obstáculo en medio. Los **espacios libres** salen de una rejilla (celda ≈ 2,5 cm, máx. 200 celdas por lado; una celda es libre si su centro está dentro del cuarto y fuera de obstáculos) con el algoritmo del **mayor rectángulo en un histograma**, repetido 3 veces tapando lo ya usado; son **aproximados** (±1–2 cm). `cabeEnLibre` usa sumas acumuladas sobre la misma rejilla y prueba las dos orientaciones.
+- **Pasos angostos** (opcional, `habPaso`): aviso cuando la separación entre dos obstáculos (o entre un mueble de ≥ 40 cm de frente y una pared) está entre 10 cm y el mínimo configurado; menos de 10 cm se considera “pegado”.
 
 ---
 
@@ -150,6 +155,7 @@ Orden de reglas (cada una puede traer `fix` automático):
 - **Un mueble predeterminado nuevo de la habitación:** una fila en `PRESETS_HAB` `[nombre, ancho, fondo, color]`.
 - **Una regla nueva de revisión:** agregarla en `revisarDiseno` con `add(nivel, tipo, texto, piezas, fix?)`; el `fix` es `{id, x?, y?, largo?}`. Probarla con `corregirTodo`.
 - **Un campo nuevo en `estado`:** valor por defecto en `porDefecto()` **y** en `migrar()`.
+- **Cambiar cómo se dibuja el frente:** `dibujarItemHab` (rama de mueble); hay una casilla global `#hab-frente`.
 - **Un tipo nuevo de elemento de habitación:** `TIPO_TXT`, rama en `dibujarItemHab`, orden de dibujo en `construirHabSvg`, y decidir si es obstáculo (`ES_OBSTACULO`).
 
 ---
@@ -178,6 +184,7 @@ No hay tests en el repo; se usaron scripts temporales **fuera del repo** (p. ej.
 - Sincronización en la nube (Cloudflare Workers KV, plan que ella ya tiene) para varios dispositivos.
 - Pruebas automáticas dentro del repo (hoy son scripts descartables).
 - Quitar `estado.rotar` del modelo y la casilla visual cuando ya no haga falta.
+- Habitación: que las distancias de espacios consideren también las alfombras/ventanas si algún día hace falta; hoy no cuentan como obstáculos.
 
 ---
 

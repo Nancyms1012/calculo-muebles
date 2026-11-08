@@ -129,3 +129,8 @@ body.print-hab #hab-sec-med{break-before:page}
 #hab-madera-lista small{display:block;color:#6d5f52}
 #hab-madera-lista small.dup{color:#a65a00}
 #hab-madera-lista small.ya{color:#1d6b32}
+.sel-info{min-height:1.2em}
+.gap-ang td{color:#b00020}
+.gap-pegado td{color:#6d5f52}
+#hab-libres-lista ol{margin:6px 0 10px 20px;padding:0}
+#hab-libres-lista li{margin:3px 0}

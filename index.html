@@ -176,7 +176,9 @@
       <label>Largo / fondo (cm)<input type="number" id="hab-largo" min="50" step="1"></label>
       <label class="check"><input type="checkbox" id="hab-snap" checked> Ajustar a paredes y otros muebles</label>
       <label>Cuadrícula (cm)<select id="hab-grid"><option value="0">Sin cuadrícula</option><option value="1">1</option><option value="5" selected>5</option><option value="10">10</option></select></label>
-      <label class="check"><input type="checkbox" id="hab-dist" checked> Mostrar distancias a las paredes</label>
+      <label class="check"><input type="checkbox" id="hab-dist" checked> Mostrar distancias del mueble seleccionado</label>
+      <label class="check"><input type="checkbox" id="hab-frente" checked> Mostrar la raya del frente</label>
+      <label class="check"><input type="checkbox" id="hab-libres"> Mostrar espacios libres</label>
     </div>
     <div id="hab-dims-nota" class="hint"></div>
     <details id="hab-paredes-det" class="paredes-det">
@@ -255,8 +257,9 @@
 
   <section class="card" id="hab-plano-sec">
     <h2>📐 Plano de la habitación</h2>
-    <p class="hint">Arrastrá los muebles. La raya negra gruesa en un lado marca el <b>frente</b> del mueble. Con un mueble seleccionado: <b>R</b> lo gira, <b>Supr</b> lo borra y las <b>flechas</b> lo mueven 1 cm (con Mayús, 10 cm).</p>
+    <p class="hint">Arrastrá los muebles. La raya negra gruesa en un lado marca el <b>frente</b> del mueble (el lado por donde se usa); podés cambiarlo con <b>🧭 Cambiar frente</b> o en la columna “Frente” de la lista. Con un mueble seleccionado: <b>R</b> lo gira, <b>Supr</b> lo borra y las <b>flechas</b> lo mueven 1 cm (con Mayús, 10 cm).</p>
     <div id="hab-barra" class="no-print">
+      <button data-act="frente" title="Pasa la raya del frente al lado siguiente">🧭 Cambiar frente</button>
       <button data-act="rotd" title="Girar 90° a la derecha (R)">↻ Girar</button>
       <button data-act="rotl" title="Girar 90° a la izquierda">↺ Girar</button>
       <button data-act="flip" title="Voltear el lado de la bisagra (solo puertas)">⇄ Voltear puerta</button>
@@ -277,6 +280,7 @@
       <label>Bisagra<select id="hab-pe-bis"><option value="ini">al inicio de la pared</option><option value="fin">al final de la pared</option></select></label>
       <label>Abre<select id="hab-pe-lado"><option value="adentro">hacia adentro</option><option value="afuera">hacia afuera</option></select></label>
     </div>
+    <div id="hab-sel-info" class="hint sel-info"></div>
     <svg id="hab-canvas" class="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="hab-rev"></div>
     <div class="no-print">
@@ -290,7 +294,7 @@
     <p class="hint">X e Y son la distancia desde la esquina superior izquierda de la habitación hasta la esquina superior izquierda del mueble (ya girado). “Giro” gira el mueble alrededor de su centro.</p>
     <div class="table-wrap">
       <table id="hab-tabla">
-        <thead><tr><th>#</th><th>Color</th><th>Nombre</th><th>Tipo</th><th>Ancho</th><th>Fondo</th><th>Giro</th><th>X</th><th>Y</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Color</th><th>Nombre</th><th>Tipo</th><th>Ancho</th><th>Fondo</th><th>Giro</th><th>Frente</th><th>X</th><th>Y</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -305,6 +309,26 @@
         <tbody></tbody>
       </table>
     </div>
+    <h3>↔ Espacios entre muebles</h3>
+    <p class="hint">Cuánto queda entre cada par de muebles (o divisiones, o el giro de una puerta) que se miran de frente. Los que están muy juntos o son angostos se marcan.</p>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="hab-paso-on"> Avisar pasos angostos en la revisión (menos de</label>
+      <label>cm<input type="number" id="hab-paso" min="20" step="5" value="60"></label>
+    </div>
+    <div class="table-wrap">
+      <table id="hab-gaps" class="cortes">
+        <thead><tr><th>Entre</th><th>y</th><th>Posición</th><th>Separación (cm)</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <h3>⬜ Espacios libres</h3>
+    <div id="hab-libres-lista"></div>
+    <div class="row">
+      <label>¿Cabe un mueble de? Ancho (cm)<input type="number" id="hab-cabe-w" min="1" value="100"></label>
+      <label>Fondo (cm)<input type="number" id="hab-cabe-h" min="1" value="60"></label>
+      <button id="hab-cabe" class="primary">🔍 ¿Dónde cabe?</button>
+    </div>
+    <div id="hab-cabe-res" class="hint"></div>
   </section>
 </main>
 

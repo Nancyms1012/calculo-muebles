@@ -33,9 +33,11 @@ La app tiene dos pestañas arriba: **🪵 Cortes de madera** y **🏠 Habitació
 1. **Medidas del cuarto:** ancho y largo, o **📏 Medir pared por pared** (cada pared con su largo y hacia dónde gira la esquina; sirve para formas en “L”).
 2. **Muebles:** elegí de la lista (podés **cambiar las medidas antes de agregar** y guardarlas con 💾), escribí uno con tus medidas (y guardalo con ★ en tu lista), o **traé tus muebles de madera** marcando cuáles.
 3. **Puertas** sobre una pared (pared, distancia desde el inicio, ancho, bisagra, hacia adentro/afuera), **ventanas**, **alfombras** y **divisiones / paredes internas**.
-4. **Plano:** arrastrá, girá (botón o tecla **R**), pegá a una pared, centrá, duplicá. Verás las distancias a las paredes y la **revisión** automática (se sale, se monta, estorba una puerta).
-5. **Medidas para colocar** (tabla con distancias a las 4 paredes) y exportación a PNG / PDF.
-6. Podés tener **varias habitaciones o distribuciones** (“opción 2”).
+4. **Plano:** arrastrá, girá (botón o tecla **R**), pegá a una pared, centrá, duplicá. Verás la **revisión** automática (se sale, se monta, estorba una puerta).
+5. **Frente de cada mueble:** la raya negra gruesa marca el lado por donde se usa. Se cambia con **🧭 Cambiar frente** o en la columna **Frente** de la lista (Abajo, Arriba, Izquierda, Derecha o Sin marca); gira junto con el mueble y se puede ocultar con una casilla.
+6. **Espacios:** al seleccionar un mueble ves cuánto queda hasta lo más cercano en cada dirección (pared u otro mueble). La sección “Medidas para colocar” trae la tabla de **espacios entre muebles**, los **espacios libres más grandes** (también se pueden pintar en el plano), la pregunta **“¿Dónde cabe un mueble de … × …?”** y un aviso opcional de **pasos angostos** (menos de 60 cm, ajustable).
+7. **Medidas para colocar** (distancias a las 4 paredes) y exportación a PNG / PDF.
+8. Podés tener **varias habitaciones o distribuciones** (“opción 2”).
 
 ### Funciones generales
 
