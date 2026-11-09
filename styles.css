@@ -134,3 +134,5 @@ body.print-hab #hab-sec-med{break-before:page}
 .gap-pegado td{color:#6d5f52}
 #hab-libres-lista ol{margin:6px 0 10px 20px;padding:0}
 #hab-libres-lista li{margin:3px 0}
+.solo-L[hidden]{display:none}
+#hab-forma-ed .hint{font-size:.85rem}

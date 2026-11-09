@@ -65,6 +65,7 @@ estado = {
 
 **Item de habitación (`habs[].items[]`):**
 `{ id, nombre, tipo:'mueble'|'alfombra'|'puerta'|'ventana'|'tabique', w, h, x, y, rot:0|90|180|270, color, origen?, frente? }`
+`forma` (solo muebles): `'L'` para un mueble en L (cualquier otro valor / ausente = rectangular). Con `forma:'L'`: `w`, `h` = medidas **totales** (caja), `da` = profundidad del brazo que recorre **todo el ancho arriba**, `db` = profundidad del brazo que recorre **todo el fondo a la izquierda** (mueble sin girar; el hueco queda abajo-derecha), `espejo` = invierte izquierda/derecha. `ajustarL(it)` mantiene `5 ≤ da ≤ h−5` y `5 ≤ db ≤ w−5`.
 `frente` (solo muebles) = lado de la raya negra **respecto al mueble sin girar**: `'abajo'` (por defecto) | `'arriba'` | `'izq'` | `'der'` | `'ninguno'`. El lado que se ve en el plano depende del giro: `frenteVisual(it)` y `frenteLocalDesdeVisual(v, rot)` convierten (el selector de la lista y el botón 🧭 trabajan con el lado **visible**).
 `origen` = `uid` del mueble de madera del que vino. **Puertas** además: `pared, pos, bisagra:'ini'|'fin', afuera` (fuente de verdad) y `x, y, rot, flip, ax, ay, bx, by` (derivados por `ubicarPuerta`, no editar a mano).
 
@@ -87,6 +88,7 @@ estado = {
 | Plano de armado | `calcularPlano(d)`, `svgPlano`, `pasaPor`, `sugerirArreglo`, `fixExtremo` |
 | Revisión de medidas | `revisarDiseno(d)` → `{pl, problemas, notas, okPiezas}` |
 | Habitación | `geomHab`, `rectDentro`, `distParedes`, `ubicarPuerta`, `cerrarParedes`, `rectHab`, `revisarHabitacion(hb, {paso}?)`, `posicionLibre`, `snapMove`, `PRESETS_HAB`, `nuevaHab`, `paredesRect`, `esRectangular` |
+| Habitación: formas | `esL`, `ajustarL`, `areaItem`, `puntosL` (contorno local), **`partesHab(it)`** (rectángulos reales que ocupa un elemento en coordenadas de la habitación: 1 si es rectangular, 2 si es una L), `partesObst(hb, ignorarId)` (todas las partes de muebles / divisiones / giro de puertas, cada una con `.it`), `hayCruce`, `distLibresItem` |
 | Habitación: frente y espacios | `LADOS`, `frenteVisual`, `frenteLocalDesdeVisual` · `obstaculosHab`, `distLibres` (vecino más cercano por lado: pared o mueble), `espaciosEntre` (pares que se miran de frente), `rejillaLibre` / `mayorRectLibre` / `espaciosLibres` (rectángulos libres más grandes), `cabeEnLibre` |
 | Utilidades | `r(n)` redondea a 2 decimales · `fN(n)` formatea 1 decimal con coma · `escH` escapa HTML |
 
@@ -123,6 +125,7 @@ Orden de reglas (cada una puede traer `fix` automático):
 - `ubicarPuerta`: a partir de `(pared, pos, w, bisagra, afuera)` calcula la caja del abanico (`x,y`), la rotación y el espejo (`flip`) con la transformación `translate(c) rotate(rot) [scale(-1,1)] translate(-w/2,-h/2)`; verificado en las 16 combinaciones (4 paredes × bisagra × adentro/afuera).
 - `snapMove`: se pega (≤ 4 cm) a paredes, vértices, centro y bordes de otros elementos; si no, a la cuadrícula.
 - **Espacios:** `distLibres` mide, desde el rectángulo de un mueble, hasta la pared (rayo desde el centro) y hasta los obstáculos (muebles, divisiones y el **giro de puertas que abren hacia adentro**) que se superponen en el eje perpendicular. `espaciosEntre` lista los pares sin otro obstáculo en medio. Los **espacios libres** salen de una rejilla (celda ≈ 2,5 cm, máx. 200 celdas por lado; una celda es libre si su centro está dentro del cuarto y fuera de obstáculos) con el algoritmo del **mayor rectángulo en un histograma**, repetido 3 veces tapando lo ya usado; son **aproximados** (±1–2 cm). `cabeEnLibre` usa sumas acumuladas sobre la misma rejilla y prueba las dos orientaciones.
+- **Formas (L):** el dibujo y `partesHab` usan la **misma transformación**: `translate(centro) rotate(rot) [scale(-1,1) si espejo] translate(-w/2,-h/2)`, con el centro de la caja ya girada (`rectHab`). Verificado en las 8 combinaciones (4 giros × espejo) contra una cuenta independiente. **Regla:** para colisiones, distancias, espacios libres, `snapMove` y `posicionLibre` se usan **las partes** (`partesHab`/`partesObst`), nunca la caja (`rectHab`), salvo para saber si algo se sale del cuarto (caja) o para el giro/clamp. `espaciosEntre` ignora pares de partes del mismo mueble y deja, por par de muebles, la separación más chica. La etiqueta del mueble en L se dibuja sobre su parte más grande y la raya del frente va en los **dos lados interiores** (donde te sentás); su selector solo tiene “Lado interior” / “Sin marca”.
 - **Pasos angostos** (opcional, `habPaso`): aviso cuando la separación entre dos obstáculos (o entre un mueble de ≥ 40 cm de frente y una pared) está entre 10 cm y el mínimo configurado; menos de 10 cm se considera “pegado”.
 
 ---
@@ -157,6 +160,7 @@ Orden de reglas (cada una puede traer `fix` automático):
 - **Una regla nueva de revisión:** agregarla en `revisarDiseno` con `add(nivel, tipo, texto, piezas, fix?)`; el `fix` es `{id, x?, y?, largo?}`. Probarla con `corregirTodo`.
 - **Un campo nuevo en `estado`:** valor por defecto en `porDefecto()` **y** en `migrar()`.
 - **Cambiar cómo se dibuja el frente:** `dibujarItemHab` (rama de mueble); hay una casilla global `#hab-frente`.
+- **Una forma nueva de mueble (ej. en U):** agregar los parámetros a `ajustarL`-like, el contorno en `puntosL`, las partes en `partesHab` (rectángulos locales → habitación), la rama de dibujo en `dibujarItemHab`, y el selector en el panel `#hab-forma-ed`. Todo lo demás (revisión, distancias, espacios) ya trabaja con partes.
 - **Un tipo nuevo de elemento de habitación:** `TIPO_TXT`, rama en `dibujarItemHab`, orden de dibujo en `construirHabSvg`, y decidir si es obstáculo (`ES_OBSTACULO`).
 
 ---
@@ -186,6 +190,7 @@ No hay tests en el repo; se usaron scripts temporales **fuera del repo** (p. ej.
 - Pruebas automáticas dentro del repo (hoy son scripts descartables).
 - Quitar `estado.rotar` del modelo y la casilla visual cuando ya no haga falta.
 - Habitación: que las distancias de espacios consideren también las alfombras/ventanas si algún día hace falta; hoy no cuentan como obstáculos.
+- Más formas de mueble (en U, esquinero redondeado) y que el escritorio en L del selector pueda guardar sus brazos al usar “★ Guardar en mi lista” (hoy solo guarda ancho y fondo).
 
 ---
 

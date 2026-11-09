@@ -272,6 +272,14 @@
       <button data-act="dup">⧉ Duplicar</button>
       <button data-act="del" class="danger">🗑 Borrar</button>
     </div>
+    <div id="hab-forma-ed" class="row no-print" hidden>
+      <b>Forma del mueble seleccionado:</b>
+      <label>Forma<select id="hab-fo-forma"><option value="rect">Rectangular</option><option value="L">En L</option></select></label>
+      <label class="solo-L">Profundidad del brazo ancho (cm)<input id="hab-fo-da" type="number" min="5" step="1"></label>
+      <label class="solo-L">Profundidad del brazo largo (cm)<input id="hab-fo-db" type="number" min="5" step="1"></label>
+      <label class="check solo-L"><input type="checkbox" id="hab-fo-esp"> Invertir el lado de la L (espejo)</label>
+      <p class="hint solo-L" style="flex-basis:100%;margin:0">Con el mueble sin girar: un brazo recorre <b>todo el ancho arriba</b> y el otro <b>todo el fondo a la izquierda</b>; el hueco queda abajo a la derecha. Usá ↻ Girar o “Invertir el lado” para ubicarlo. “Ancho” y “Fondo” de la lista son las medidas totales. La raya negra marca el lado interior, donde te sentás.</p>
+    </div>
     <div id="hab-puerta-ed" class="row no-print" hidden>
       <b>Puerta seleccionada:</b>
       <label>Pared<select id="hab-pe-pared"></select></label>

@@ -32,6 +32,7 @@ La app tiene dos pestañas arriba: **🪵 Cortes de madera** y **🏠 Habitació
 
 1. **Medidas del cuarto:** ancho y largo, o **📏 Medir pared por pared** (cada pared con su largo y hacia dónde gira la esquina; sirve para formas en “L”).
 2. **Muebles:** elegí de la lista (podés **cambiar las medidas antes de agregar** y guardarlas con 💾), escribí uno con tus medidas (y guardalo con ★ en tu lista), o **traé tus muebles de madera** marcando cuáles.
+   - **Escritorio en L:** está en la lista y se dibuja **con forma de L** (no como un rectángulo). Al seleccionarlo aparece el panel **“Forma del mueble”**: cambiás la profundidad de cada brazo e **invertís el lado** de la L; se gira con ↻. El hueco de la L cuenta como espacio libre (una silla puede entrar ahí). Cualquier mueble se puede pasar a “En L” (o volver a rectangular) desde ese mismo panel.
 3. **Puertas** sobre una pared (pared, distancia desde el inicio, ancho, bisagra, hacia adentro/afuera), **ventanas**, **alfombras** y **divisiones / paredes internas**.
 4. **Plano:** arrastrá, girá (botón o tecla **R**), pegá a una pared, centrá, duplicá. Verás la **revisión** automática (se sale, se monta, estorba una puerta).
 5. **Frente de cada mueble:** la raya negra gruesa marca el lado por donde se usa. Se cambia con **🧭 Cambiar frente** o en la columna **Frente** de la lista (Abajo, Arriba, Izquierda, Derecha o Sin marca); gira junto con el mueble y se puede ocultar con una casilla.

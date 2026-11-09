@@ -87,6 +87,7 @@ El color se decide por el **nombre** de la pieza (expresiones regulares en `COLO
 - **Sobrante aprovechable:** “en la tabla 5 sobra un pedazo que sirve para el piso inferior del mueble 3” → el optimizador rellena huecos de todas las tablas abiertas.
 - **La raya negra de los muebles (Habitación):** representa el **frente** (donde se usa / abren puertas o cajones), no el fondo. Se validó con una mesita de 38 × 28: la raya siempre cae sobre un lado de 38 (el ancho) en las 4 orientaciones. Aun así generó confusión (en muchos planos una línea gruesa marca la parte de atrás), por eso se agregó la opción **Frente** (lado elegible o “sin marca”).
 - **“¿Cuánto espacio queda entre un mueble y otro, o espacios vacíos?”:** se resolvió con distancias al vecino más cercano, tabla de separaciones, espacios libres y “¿cabe?”.
+- **Escritorio en L:** pidió que al agregar el “escritorio en L” se **dibuje esa forma**. Un rectángulo ocuparía de más (la silla del hueco daría “se monta”), así que los muebles ahora pueden tener **partes** (un L = 2 rectángulos) y todas las revisiones, distancias y espacios libres usan las partes, no la caja.
 - **Cuarto de su hija:** tiene **una división (pared interna)** que separa una de las paredes del cuarto → tipo de elemento `tabique`. Algunos de sus muebles no van en ese cuarto y uno está **duplicado** (misma medida externa, distinta distribución interna) → selector de muebles a traer con aviso de copias.
 
 ---
@@ -106,6 +107,7 @@ El color se decide por el **nombre** de la pieza (expresiones regulares en `COLO
 11. Habitación: **paredes una por una**, **puertas sobre pared**, **división interna**, **elegir qué muebles traer**, **modificar y guardar medidas** de los muebles predeterminados.
 12. Documentación (`README`, `CONTEXTO`, `HANDOFF`).
 13. Cortes: el esquema de corte y la lista de cortes muestran el **#número de pieza del Plano de armado** (pedido: poder cruzar el corte con el armado).
+15. Habitación: **mueble en L** (escritorio en L dibujado como L real; el hueco cuenta como espacio libre).
 14. Habitación: **frente** elegible por mueble (la raya negra era confusa: marcaba el frente y ella esperaba otra cosa); **espacios entre muebles**, **espacios libres**, **“¿dónde cabe?”** y aviso opcional de **pasos angostos**.
 
 ---
