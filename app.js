@@ -48,7 +48,7 @@ function mejorEspacio(bin, b, p, kerf, rotar, heur) {
 function colocar(bin, m, p, kerf) {
   const f = bin.libres[m.idx];
   const pw = m.w + kerf, ph = m.h + kerf;
-  bin.piezas.push({ nombre: p.nombre, m: p.m, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
+  bin.piezas.push({ nombre: p.nombre, m: p.m, n: p.n, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
   bin.libres.splice(m.idx, 1);
   const rw = f.w - pw, rh = f.h - ph;
   let r1, r2;
@@ -72,7 +72,7 @@ function expandirTiras(lista, L, A, rotar) {
     if (cabeAsi || cabeGirada || p.w > L + EPS) { out.push(p); continue; }
     const n = Math.ceil(p.h / A - EPS);
     const h = Math.round((p.h / n) * 100) / 100;
-    for (let i = 1; i <= n; i++) out.push({ nombre: `${p.nombre} (tira ${i}/${n})`, w: p.w, h, tira: true, m: p.m });
+    for (let i = 1; i <= n; i++) out.push({ nombre: `${p.nombre} (tira ${i}/${n})`, w: p.w, h, tira: true, m: p.m, n: p.n });
   }
   return out;
 }
@@ -126,7 +126,7 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
     const k = +p.espesor;
     if (!porEspesor.has(k)) porEspesor.set(k, []);
     for (let i = 0; i < p.cant; i++) {
-      porEspesor.get(k).push({ nombre: p.nombre || 'Pieza', w: +p.largo, h: +p.ancho, m: p.m });
+      porEspesor.get(k).push({ nombre: p.nombre || 'Pieza', w: +p.largo, h: +p.ancho, m: p.m, n: p.nums ? p.nums[i] : undefined });
     }
   }
   for (const [esp, lista] of porEspesor) {
@@ -174,15 +174,23 @@ function calcularPlan(piezas, stock, kerf, rotar, unir) {
   };
 }
 
-function piezasDesdeDiseno(el) {
+function piezasDesdeDiseno(el, numPorId) {
   const m = new Map();
   for (const e of el) {
     if (e.tubo) continue;
     const p = { nombre: e.nombre || 'Pieza', largo: r(e.largo), ancho: r(e.prof), espesor: r(e.esp), cant: 1 };
     const k = [p.nombre, p.largo, p.ancho, p.espesor].join('|');
-    if (m.has(k)) m.get(k).cant++; else m.set(k, p);
+    const n = numPorId ? numPorId.get(e.id) : undefined;
+    if (m.has(k)) { const q = m.get(k); q.cant++; if (n !== undefined) q.nums.push(n); }
+    else { p.nums = n !== undefined ? [n] : []; m.set(k, p); }
   }
   return [...m.values()];
+}
+// Número de cada pieza del diseño: es EL MISMO que muestra el plano de armado (id -> n).
+function numerosDeDiseno(d) {
+  const mp = new Map();
+  if (d && d.el && d.el.length) calcularPlano(d).el.forEach(e => mp.set(e.id, e.n));
+  return mp;
 }
 
 // Tubos para ropa: no se cortan de tabla, se listan aparte.
@@ -1277,12 +1285,12 @@ if (typeof document !== 'undefined') {
       const filas = new Map();
       g.tablas.forEach((t, ti) => t.piezas.forEach(p => {
         const k = `${p.m}|${p.nombre}|${p.w}|${p.h}`;
-        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, m: p.m, w: p.w, h: p.h, cant: 0, tablas: new Set() });
-        const f = filas.get(k); f.cant++; f.tablas.add(ti + 1);
+        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, m: p.m, w: p.w, h: p.h, cant: 0, tablas: new Set(), nums: [] });
+        const f = filas.get(k); f.cant++; f.tablas.add(ti + 1); if (p.n !== undefined) f.nums.push(p.n);
       }));
       return `<div class="grupo"><b>Espesor ${g.espesor} cm — ${esc(g.stock.nombre)}</b>
-      <table class="cortes"><thead><tr><th>Pieza</th>${multi ? '<th>Mueble</th>' : ''}<th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
-      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td>${multi ? `<td>${esc(nomM(f.m))}</td>` : ''}<td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
+      <table class="cortes"><thead><tr><th>Pieza</th>${multi ? '<th>Mueble</th>' : ''}<th title="Número de la pieza en el Plano de armado"># pieza</th><th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
+      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td>${multi ? `<td>${esc(nomM(f.m))}</td>` : ''}<td><b>${f.nums.length ? [...f.nums].sort((a, b) => a - b).join(', ') : '—'}</b></td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
       </tbody></table></div>`;
     }).join('');
 
@@ -1301,13 +1309,21 @@ if (typeof document !== 'undefined') {
           ? `<div class="aviso nota">♻ Cortando todos los muebles juntos y aprovechando los sobrantes comprás <b>${plan.totalTablas}</b> tablas en vez de ${separado} (cada mueble por separado). ¡Ahorrás ${ahorro}!</div>`
           : `<div class="aviso nota">ℹ Cortando por separado necesitarías ${separado} tablas; juntos ${plan.totalTablas}.</div>`;
       }
-      extra += '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar.</p>';
-    } else extra = '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar.</p>';
+      extra += '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar. El <b>#número</b> de cada pieza es el mismo del Plano de armado.</p>';
+    } else extra = '<p class="hint">Los recuadros rojos punteados son sobrantes (retazos) que aún podés aprovechar. El <b>#número</b> de cada pieza es el mismo del Plano de armado.</p>';
     $('leyenda-res').innerHTML += extra;
     $('esquemas').innerHTML = plan.grupos.map(g => g.tablas.map((t, ti) => {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
-      const rects = t.piezas.map(p => `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="${colorDe(p.nombre)}" stroke="#333" stroke-width="1"/>
-        <text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle">${multi ? `<tspan font-weight="bold">M${p.m + 1}</tspan> ` : ''}${esc(p.nombre)} ${num(p.w)}×${num(p.h)}</text></g>`).join('');
+      const rects = t.piezas.map(p => {
+        const pre = [multi ? `M${p.m + 1}` : '', p.n !== undefined ? `#${p.n}` : ''].filter(Boolean).join(' '), dim = `${num(p.w)}×${num(p.h)}`;
+        const corto = String(p.nombre).split(/[ /(]/)[0], ancho = p.w * sc * 0.96, cw = fs * 0.56;
+        const opciones = [[pre, p.nombre, dim], [pre, corto, dim], [pre, dim], [pre], [p.n !== undefined ? `#${p.n}` : '']].map(a => a.filter(Boolean).join(' '));
+        const txt = opciones.find(o => o && o.length * cw <= ancho) || '';
+        const partes = txt.match(/^((?:M\d+ )?#\d+)(.*)$/);
+        const rotulo = partes ? `<tspan font-weight="bold" fill="#000">${esc(partes[1])}</tspan>${esc(partes[2])}` : esc(txt);
+        return `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="${colorDe(p.nombre)}" stroke="#333" stroke-width="1"/>
+        ${txt ? `<text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="${fs * 0.22}" paint-order="stroke">${rotulo}</text>` : ''}</g>`;
+      }).join('');
       const retazos = retazosDe(t, W, H, estado.kerf, 5).map(z => `<g><rect x="${z.x * sc}" y="${z.y * sc}" width="${z.w * sc}" height="${z.h * sc}" fill="none" stroke="#c33" stroke-width="1.5" stroke-dasharray="6 4"/>
         <text x="${(z.x + z.w / 2) * sc}" y="${(z.y + z.h / 2) * sc}" font-size="${fs * 0.9}" fill="#c33" text-anchor="middle" dominant-baseline="middle">sobra ${num(z.w)}×${num(z.h)}</text></g>`).join('');
       return `<div class="tabla-sch"><small>Tabla #${ti + 1} · ${esc(g.stock.nombre)} (${W}×${H}×${g.stock.espesor} cm)${t.piezas.some(p => p.rot) ? ' · incluye piezas giradas' : ''}</small>
@@ -1410,7 +1426,7 @@ if (typeof document !== 'undefined') {
   function piezasDeMueble(i) {
     sincronizar();
     const mu = estado.muebles[i];
-    return piezasDesdeDiseno(mu.diseno.el).concat(mu.piezas).map(p => Object.assign({}, p, { m: i }));
+    return piezasDesdeDiseno(mu.diseno.el, numerosDeDiseno(mu.diseno)).concat(mu.piezas).map(p => Object.assign({}, p, { m: i }));
   }
   function incluidos() { return estado.muebles.map((m, i) => i).filter(i => estado.muebles[i].incluir !== false); }
   function todasLasPiezas() { return incluidos().flatMap(i => piezasDeMueble(i)); }
@@ -1432,11 +1448,11 @@ if (typeof document !== 'undefined') {
   }
   function pintarAuto() {
     pintarLeyenda();
-    const ps = piezasDesdeDiseno(dis().el), mats = materialesDesdeDiseno(dis().el);
+    const ps = piezasDesdeDiseno(dis().el, numerosDeDiseno(dis())), mats = materialesDesdeDiseno(dis().el);
     const total = ps.reduce((t, p) => t + p.cant, 0);
     $('piezas-auto').innerHTML = ps.length
-      ? `<b>Del diseño: ${total} piezas</b><div class="table-wrap"><table class="cortes"><thead><tr><th>Pieza</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th></tr></thead><tbody>${
-        ps.map(p => `<tr><td><i class="sw" style="background:${colorDe(p.nombre)}"></i>${esc(p.nombre)}</td><td>${num(p.largo)}</td><td>${num(p.ancho)}</td><td>${num(p.espesor)}</td><td><b>${p.cant}</b></td></tr>`).join('')
+      ? `<b>Del diseño: ${total} piezas</b><div class="table-wrap"><table class="cortes"><thead><tr><th>Pieza</th><th title="Número en el Plano de armado"># pieza</th><th>Largo</th><th>Ancho</th><th>Espesor</th><th>Cant.</th></tr></thead><tbody>${
+        ps.map(p => `<tr><td><i class="sw" style="background:${colorDe(p.nombre)}"></i>${esc(p.nombre)}</td><td><b>${p.nums && p.nums.length ? [...p.nums].sort((a, b) => a - b).join(', ') : '—'}</b></td><td>${num(p.largo)}</td><td>${num(p.ancho)}</td><td>${num(p.espesor)}</td><td><b>${p.cant}</b></td></tr>`).join('')
       }</tbody></table></div>` + (mats.length ? `<p class="hint">Aparte (no es madera): ${mats.map(m => `${m.cant} × ${esc(m.nombre)} de ${num(m.largo)} cm`).join(', ')}</p>` : '')
       : '<p class="hint">Todavía no hay piezas: agregá techo, piso, costados, repisas, etc. en el Diseñador (arriba) y aparecerán aquí solas.</p>';
   }
@@ -2411,4 +2427,4 @@ if (typeof document !== 'undefined') {
   mostrarVista(cargarUI().vista === 'hab' ? 'hab' : 'cortes');
 }
 
-if (typeof module !== 'undefined') module.exports = { LADOS, frenteVisual, frenteLocalDesdeVisual, obstaculosHab, distLibres, espaciosEntre, espaciosLibres, cabeEnLibre, geomHab, rectDentro, distParedes, ubicarPuerta, cerrarParedes, paredesRect, esRectangular, PRESETS_HAB, nuevaHab, rectHab, revisarHabitacion, posicionLibre, snapMove, revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };
+if (typeof module !== 'undefined') module.exports = { numerosDeDiseno, LADOS, frenteVisual, frenteLocalDesdeVisual, obstaculosHab, distLibres, espaciosEntre, espaciosLibres, cabeEnLibre, geomHab, rectDentro, distParedes, ubicarPuerta, cerrarParedes, paredesRect, esRectangular, PRESETS_HAB, nuevaHab, rectHab, revisarHabitacion, posicionLibre, snapMove, revisarDiseno, calcularPlano, svgPlano, retazosDe, colorDe, calcularPlan, PLANTILLAS, piezasDesdeDiseno, materialesDesdeDiseno };

@@ -105,7 +105,8 @@ El color se decide por el **nombre** de la pieza (expresiones regulares en `COLO
 10. Arreglo de ancho de página (choque de nombre de clase CSS); validación de la división sobre el piso; validación con espesor 1,6.
 11. Habitación: **paredes una por una**, **puertas sobre pared**, **división interna**, **elegir qué muebles traer**, **modificar y guardar medidas** de los muebles predeterminados.
 12. Documentación (`README`, `CONTEXTO`, `HANDOFF`).
-13. Habitación: **frente** elegible por mueble (la raya negra era confusa: marcaba el frente y ella esperaba otra cosa); **espacios entre muebles**, **espacios libres**, **“¿dónde cabe?”** y aviso opcional de **pasos angostos**.
+13. Cortes: el esquema de corte y la lista de cortes muestran el **#número de pieza del Plano de armado** (pedido: poder cruzar el corte con el armado).
+14. Habitación: **frente** elegible por mueble (la raya negra era confusa: marcaba el frente y ella esperaba otra cosa); **espacios entre muebles**, **espacios libres**, **“¿dónde cabe?”** y aviso opcional de **pasos angostos**.
 
 ---
 

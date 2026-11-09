@@ -23,7 +23,7 @@ La app tiene dos pestañas arriba: **🪵 Cortes de madera** y **🏠 Habitació
 2. **Plantillas rápidas** (Mesa, Banco, Librero, Gabinete, Tabla o estante, Otro): generan piezas con medidas que podés editar.
 3. **Piezas a cortar:** salen **solas** del diseño. Si algo no está en el diseño (puertas, fondo, cajones) lo agregás como “piezas adicionales”.
 4. **Tablas que venden:** largo, ancho, espesor y precio (opcional) de cada tabla de la tienda. Tiene que haber una del **mismo espesor** que las piezas.
-5. **Calcular:** te dice cuántas tablas comprar, la lista de cortes y el esquema de cada tabla (con los retazos que sobran marcados en rojo punteado).
+5. **Calcular:** te dice cuántas tablas comprar, la lista de cortes y el esquema de cada tabla (con los retazos que sobran marcados en rojo punteado). Cada pieza lleva su **#número**, el mismo del Plano de armado, tanto en el esquema como en la columna “# pieza” de la lista de cortes (y de la sección 2).
 6. **Varios muebles:** con las pestañas de muebles (“+ Agregar otro mueble”) se calculan juntos y comparten tablas. La casilla ✔ de cada pestaña decide cuáles entran al cálculo (sirve para comparar “opción 1” y “opción 2”).
 7. **✅ Revisar medidas:** compara cada pieza con sus vecinas como si lo hicieras a mano con la cinta (ver reglas en `HANDOFF.md`). Muchos problemas tienen botón “Corregir”.
 8. **📐 Plano de armado:** alturas desde el piso, distancias, espacios libres, agujero del tubo, y una tabla “dónde va” cada pieza. Se puede descargar (PNG) o imprimir (PDF).
