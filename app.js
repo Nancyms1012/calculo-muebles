@@ -1374,16 +1374,19 @@ if (typeof document !== 'undefined') {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
       const rects = t.piezas.map(p => {
         const pre = [multi ? `M${p.m + 1}` : '', p.n !== undefined ? `#${p.n}` : ''].filter(Boolean).join(' '), dim = `${num(p.w)}×${num(p.h)}`;
-        const corto = String(p.nombre).split(/[ /(]/)[0], ancho = p.w * sc * 0.96, cw = fs * 0.56;
+        const corto = String(p.nombre).split(/[ /(]/)[0], ancho = p.w * sc * 0.96, cw = fs * 0.64;
         const opciones = [[pre, p.nombre, dim], [pre, corto, dim], [pre, dim], [pre], [p.n !== undefined ? `#${p.n}` : '']].map(a => a.filter(Boolean).join(' '));
         const txt = opciones.find(o => o && o.length * cw <= ancho) || '';
-        const partes = txt.match(/^((?:M\d+ )?#\d+)(.*)$/);
-        const rotulo = partes ? `<tspan font-weight="bold" fill="#000">${esc(partes[1])}</tspan>${esc(partes[2])}` : esc(txt);
+        const rotulo = esc(txt);
         return `<g><rect x="${p.x * sc}" y="${p.y * sc}" width="${p.w * sc}" height="${p.h * sc}" fill="${colorDe(p.nombre)}" stroke="#333" stroke-width="1"/>
-        ${txt ? `<text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" stroke="#fff" stroke-width="${fs * 0.22}" paint-order="stroke">${rotulo}</text>` : ''}</g>`;
+        ${txt ? `<text x="${(p.x + p.w / 2) * sc}" y="${(p.y + p.h / 2) * sc}" font-size="${fs}" font-weight="bold" fill="#000" stroke="none" text-anchor="middle" dominant-baseline="middle">${rotulo}</text>` : ''}</g>`;
       }).join('');
-      const retazos = retazosDe(t, W, H, estado.kerf, 5).map(z => `<g><rect x="${z.x * sc}" y="${z.y * sc}" width="${z.w * sc}" height="${z.h * sc}" fill="none" stroke="#c33" stroke-width="1.5" stroke-dasharray="6 4"/>
-        <text x="${(z.x + z.w / 2) * sc}" y="${(z.y + z.h / 2) * sc}" font-size="${fs * 0.9}" fill="#c33" text-anchor="middle" dominant-baseline="middle">sobra ${num(z.w)}×${num(z.h)}</text></g>`).join('');
+      const retazos = retazosDe(t, W, H, estado.kerf, 5).map(z => {
+        const dimz = `${num(z.w)}×${num(z.h)}`, cwz = fs * 0.9 * 0.64, anchoz = z.w * sc * 0.96;
+        const txtz = [`sobra ${dimz}`, dimz].find(o => o.length * cwz <= anchoz) || '';
+        return `<g><rect x="${z.x * sc}" y="${z.y * sc}" width="${z.w * sc}" height="${z.h * sc}" fill="none" stroke="#c33" stroke-width="1.5" stroke-dasharray="6 4"/>
+        ${txtz ? `<text x="${(z.x + z.w / 2) * sc}" y="${(z.y + z.h / 2) * sc}" font-size="${fs * 0.9}" font-weight="bold" fill="#000" stroke="none" text-anchor="middle" dominant-baseline="middle">${txtz}</text>` : ''}</g>`;
+      }).join('');
       return `<div class="tabla-sch"><small>Tabla #${ti + 1} · ${esc(g.stock.nombre)} (${W}×${H}×${g.stock.espesor} cm)${t.piezas.some(p => p.rot) ? ' · incluye piezas giradas' : ''}</small>
       <svg viewBox="0 0 800 ${H * sc}">${rects}${retazos}</svg></div>`;
     }).join('')).join('');
