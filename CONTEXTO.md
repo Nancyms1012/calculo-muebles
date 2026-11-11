@@ -108,7 +108,8 @@ El color se decide por el **nombre** de la pieza (expresiones regulares en `COLO
 12. Documentación (`README`, `CONTEXTO`, `HANDOFF`).
 13. Cortes: el esquema de corte y la lista de cortes muestran el **#número de pieza del Plano de armado** (pedido: poder cruzar el corte con el armado).
 15. Habitación: **mueble en L** (escritorio en L dibujado como L real; el hueco cuenta como espacio libre).
-14. Habitación: **frente** elegible por mueble (la raya negra era confusa: marcaba el frente y ella esperaba otra cosa); **espacios entre muebles**, **espacios libres**, **“¿dónde cabe?”** y aviso opcional de **pasos angostos**.
+14. Cortes: arreglo de piezas que salían “invertidas” (50×180 en vez de 180×50): el resultado ahora muestra siempre **largo × ancho como se escribió** y marca con ↻ las que van giradas en la tabla.
+14b. Habitación: **frente** elegible por mueble (la raya negra era confusa: marcaba el frente y ella esperaba otra cosa); **espacios entre muebles**, **espacios libres**, **“¿dónde cabe?”** y aviso opcional de **pasos angostos**.
 
 ---
 

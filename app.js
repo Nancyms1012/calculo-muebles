@@ -48,7 +48,7 @@ function mejorEspacio(bin, b, p, kerf, rotar, heur) {
 function colocar(bin, m, p, kerf) {
   const f = bin.libres[m.idx];
   const pw = m.w + kerf, ph = m.h + kerf;
-  bin.piezas.push({ nombre: p.nombre, m: p.m, n: p.n, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
+  bin.piezas.push({ nombre: p.nombre, m: p.m, n: p.n, lw: p.w, lh: p.h, x: f.x, y: f.y, w: m.w, h: m.h, rot: m.rot });
   bin.libres.splice(m.idx, 1);
   const rw = f.w - pw, rh = f.h - ph;
   let r1, r2;
@@ -1342,14 +1342,16 @@ if (typeof document !== 'undefined') {
     $('lista-cortes').innerHTML = plan.grupos.map(g => {
       const filas = new Map();
       g.tablas.forEach((t, ti) => t.piezas.forEach(p => {
-        const k = `${p.m}|${p.nombre}|${p.w}|${p.h}`;
-        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, m: p.m, w: p.w, h: p.h, cant: 0, tablas: new Set(), nums: [] });
-        const f = filas.get(k); f.cant++; f.tablas.add(ti + 1); if (p.n !== undefined) f.nums.push(p.n);
+        const k = `${p.m}|${p.nombre}|${p.lw}|${p.lh}`;
+        if (!filas.has(k)) filas.set(k, { nombre: p.nombre, m: p.m, w: p.lw, h: p.lh, cant: 0, tablas: new Map(), nums: [], giradas: 0 });
+        const f = filas.get(k); f.cant++; if (p.n !== undefined) f.nums.push(p.n);
+        const tk = f.tablas.get(ti + 1) || { n: 0, rot: 0 }; tk.n++; if (p.rot) { tk.rot++; f.giradas++; } f.tablas.set(ti + 1, tk);
       }));
       return `<div class="grupo"><b>Espesor ${g.espesor} cm — ${esc(g.stock.nombre)}</b>
       <table class="cortes"><thead><tr><th>Pieza</th>${multi ? '<th>Mueble</th>' : ''}<th title="Número de la pieza en el Plano de armado"># pieza</th><th>Largo</th><th>Ancho</th><th>Cant.</th><th>En tabla #</th></tr></thead><tbody>
-      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td>${multi ? `<td>${esc(nomM(f.m))}</td>` : ''}<td><b>${f.nums.length ? [...f.nums].sort((a, b) => a - b).join(', ') : '—'}</b></td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].join(', ')}</td></tr>`).join('')}
-      </tbody></table></div>`;
+      ${[...filas.values()].map(f => `<tr><td><i class="sw" style="background:${colorDe(f.nombre)}"></i>${esc(f.nombre)}</td>${multi ? `<td>${esc(nomM(f.m))}</td>` : ''}<td><b>${f.nums.length ? [...f.nums].sort((a, b) => a - b).join(', ') : '—'}</b></td><td>${num(f.w)}</td><td>${num(f.h)}</td><td>${f.cant}</td><td>${[...f.tablas].sort((a, b) => a[0] - b[0]).map(([tn, v]) => tn + (v.rot ? (v.rot === v.n ? ' ↻' : ` (${v.rot} ↻)`) : '')).join(', ')}</td></tr>`).join('')}
+      </tbody></table>
+      ${[...filas.values()].some(f => f.giradas) ? '<p class="hint">↻ = esa pieza va <b>girada</b> en la tabla (su largo queda a lo ancho de la tabla). La medida sigue siendo <b>largo × ancho</b>, como la escribiste.</p>' : ''}</div>`;
     }).join('');
 
     const mats = todosLosMateriales();
@@ -1373,7 +1375,7 @@ if (typeof document !== 'undefined') {
     $('esquemas').innerHTML = plan.grupos.map(g => g.tablas.map((t, ti) => {
       const W = g.stock.largo, H = g.stock.ancho, sc = 800 / W, fs = Math.max(Math.min(H * sc * 0.28, 14), 7);
       const rects = t.piezas.map(p => {
-        const pre = [multi ? `M${p.m + 1}` : '', p.n !== undefined ? `#${p.n}` : ''].filter(Boolean).join(' '), dim = `${num(p.w)}×${num(p.h)}`;
+        const pre = [multi ? `M${p.m + 1}` : '', p.n !== undefined ? `#${p.n}` : ''].filter(Boolean).join(' '), dim = `${num(p.lw)}×${num(p.lh)}${p.rot ? ' ↻' : ''}`;
         const corto = String(p.nombre).split(/[ /(]/)[0], ancho = p.w * sc * 0.96, cw = fs * 0.64;
         const opciones = [[pre, p.nombre, dim], [pre, corto, dim], [pre, dim], [pre], [p.n !== undefined ? `#${p.n}` : '']].map(a => a.filter(Boolean).join(' '));
         const txt = opciones.find(o => o && o.length * cw <= ancho) || '';
